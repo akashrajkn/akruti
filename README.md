@@ -1,0 +1,2 @@
+# akruti
+Word Morphology
