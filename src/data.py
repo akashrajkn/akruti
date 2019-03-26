@@ -2,6 +2,33 @@ import os
 import pickle
 
 
+def save_file(path, dat):
+    '''
+    Dump pickle file
+    Args:
+        path: file path to save
+        dat : python struct to be saved
+    '''
+
+    with open(path, 'wb') as of:
+        pickle.dump(dat, of, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+def load_file(path):
+    '''
+    load pickle File
+    Args:
+        path: file path
+    Returns:
+        out : pickle loaded
+    '''
+
+    with open(path, 'rb') as if:
+        out = pickle.load(if)
+
+    return out
+
+
 def read_file(path, task):
     '''
     Read file and return respective dictionary
@@ -62,7 +89,7 @@ def read_task_1(path):
     sentences = source.strip().split('\n')
 
     for sentence in sentences:
-        line = sentence.strip().split('\t')
+        line  = sentence.strip().split('\t')
 
         if len(line) > 3:
             print('Something wrong with line: {}'.format(sentence))
@@ -90,7 +117,7 @@ def read_task_3(path):
     sentences = source.strip().split('\n')
 
     for sentence in sentences:
-        line = sentence.strip().split('\t')
+        line  = sentence.strip().split('\t')
 
         if len(line) > 3:
             print('Something wrong with line: {}'.format(sentence))
