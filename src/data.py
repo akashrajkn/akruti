@@ -23,8 +23,8 @@ def load_file(path):
         out : pickle loaded
     '''
 
-    with open(path, 'rb') as if:
-        out = pickle.load(if)
+    with open(path, 'rb') as f:
+        out = pickle.load(f)
 
     return out
 
@@ -49,7 +49,7 @@ def read_file(path, task):
         out = read_task_2(path)
     elif task == 3:
         out = read_task_3(path)
-    else
+    else:
         print('Task number is wrong')
 
     return out
