@@ -101,6 +101,8 @@ def read_task_1(path):
             'target_form': line[2]
         })
 
+    return out
+
 
 def read_task_3(path):
     '''
@@ -128,3 +130,5 @@ def read_task_3(path):
             'MSD'        : process_MSD(line[1]),
             'target_form': line[2]
         })
+
+    return out
