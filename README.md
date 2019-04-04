@@ -18,9 +18,9 @@ A word’s form reflects syntactic and semantic categories that are expressed by
 </p>
 
 <p align="justify">
-(Zhou and Neubig, 2017) introduce a new framework for labeled sequence transduction problems: multi-space variational encoder-decoders (MSVED). To explain the observed data, this framework employs continuous and discrete latent variables belonging to multiple separate probability distributions.  For the task of morphological re-inflection, source and target word forms (and lemma) are represented by continuous random variables and each of the morphosyntactic descriptions isrepresented by a discrete random variable.  A challenge in this model is performing backprop through discrete random variables, which is addressed by using the Gumbel-Softmax trick (Maddison et al.,2014; Gumbel and Lieblein, 1954).
+(Zhou and Neubig, 2017) introduce a new framework for labeled sequence transduction problems: multi-space variational encoder-decoders (<a href="https://github.com/akashrajkn/MSVED-morph-reinflection">MSVED</a>). To explain the observed data, this framework employs continuous and discrete latent variables belonging to multiple separate probability distributions.  For the task of morphological re-inflection, source and target word forms (and lemma) are represented by continuous random variables and each of the morphosyntactic descriptions isrepresented by a discrete random variable.  A challenge in this model is performing backprop through discrete random variables, which is addressed by using the Gumbel-Softmax trick (Maddison et al.,2014; Gumbel and Lieblein, 1954).
 
-(Louizos et al., 2017) proposehard concrete distribution, which is obtained by stretching a binary concrete distribution (Maddison et al., 2016) and then transforming its samples with a hard-sigmoid. This distribution is differentiable with respect to its parameters, which allows for straightforward application of gradient descent. 
+(Louizos et al., 2017) propose hard concrete distribution, which is obtained by stretching a binary concrete distribution (Maddison et al., 2016) and then transforming its samples with a hard-sigmoid. This distribution is differentiable with respect to its parameters, which allows for straightforward application of gradient descent. 
 </p>
 
 <h3> References </h3>
