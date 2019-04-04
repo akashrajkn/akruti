@@ -37,8 +37,15 @@ def main(filepath):
                 idx_2_char[vocab_size] = character
                 vocab_size += 1
 
-    print(char_2_idx)
-    print(idx_2_char)
+    msd_size   = 0
+    desc_2_idx = {}
+
+    for obj in msds:
+        for key in obj.keys():
+            if desc_2_idx.get(key) is None:
+                desc_2_idx[key] = msd_size
+                msd_size += 1
+
 
 
 if __name__ == '__main__':
