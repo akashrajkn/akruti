@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import numpy as np
-import theano
 from collections import OrderedDict
 import codecs
 import sys
@@ -275,24 +274,31 @@ def create_tag_dict():
 
 
 def preprocess(addsup=0.0):
-    task1_train_data = datapath + lang + task1_train
-    task1_test_data = datapath + lang + task1_test
-    task1_dev_data = datapath + lang + task1_dev
-    task2_train_data = datapath + lang + task2_train
-    task2_test_data = datapath + lang + task2_test
-    task2_dev_data = datapath + lang + task2_dev
-    task3_train_data = datapath + lang + task3_train
-    task3_test_data = datapath + lang + task3_test
+    # task1_train_data = datapath + lang + task1_train
+    # task1_test_data = datapath + lang + task1_test
+    # task1_dev_data = datapath + lang + task1_dev
+    # task2_train_data = datapath + lang + task2_train
+    # task2_test_data = datapath + lang + task2_test
+    # task2_dev_data = datapath + lang + task2_dev
+    # task3_train_data = datapath + lang + task3_train
+    # task3_test_data = datapath + lang + task3_test
+
+    task3_train_data = '../data/files/task3_test'
+    task3_test_data  = '../data/files/task1_test'
 
     # test_data = datapath + lang + task2_dev
     allwords = ""
 
-    allwords = read_task3(task3_train_data, allwords)
-    allwords = read_task1(task1_train_data, allwords)
-    allwords = read_task1(task1_test_data, allwords)
-    allwords = read_task2(task2_train_data, allwords, test=True)
-    allwords = read_task2(task2_test_data, allwords, test=True)
-    allwords = read_task2(task2_dev_data, allwords, test=True)
+    # allwords = read_task3(task3_train_data, allwords)
+    # allwords = read_task1(task1_train_data, allwords)
+    # allwords = read_task1(task1_test_data, allwords)
+    # allwords = read_task2(task2_train_data, allwords, test=True)
+    # allwords = read_task2(task2_test_data, allwords, test=True)
+    # allwords = read_task2(task2_dev_data, allwords, test=True)
+
+    allwords = read_task1('../data/files/task1_test', allwords)
+    allwords = read_task3('../data/files/task3_test', allwords)
+    allwords = read_task2('../data/files/task2_test', allwords, test=True)
 
     chars = list(set(allwords))
     data_size, vocab_size = len(allwords), len(chars)
