@@ -1,4 +1,5 @@
 import os
+import pickle
 
 from data import *
 
@@ -12,10 +13,7 @@ from data import *
     output seq: to lsit of idx
 '''
 
-def main(filepath):
-
-    all_out = read_task_3(filepath)
-
+def convert_to_dicts(all_out):
     source_forms = []
     msds         = []
     target_forms = []
@@ -39,13 +37,35 @@ def main(filepath):
 
     msd_size   = 0
     desc_2_idx = {}
+    idx_2_desc = {}
 
     for obj in msds:
         for key in obj.keys():
             if desc_2_idx.get(key) is None:
                 desc_2_idx[key] = msd_size
+                idx_2_desc[msd_size] = key
                 msd_size += 1
 
+    print('Saving (Vocab) dictionaries')
+
+    save_file('../data/pickles/idx_2_char', idx_2_char)
+    save_file('../data/pickles/char_2_idx', char_2_idx)
+    save_file('../data/pickles/idx_2_desc', idx_2_desc)
+    save_file('../data/pickles/desc_2_idx', desc_2_idx)
+
+    print('  - Done')
+
+def main(filepath):
+
+    all_out = read_task_3(filepath)
+
+    if not os.path.exists('../data/pickles/idx_2_char'):
+        convert_to_dicts(all_out)
+
+    idx_2_char = load_file('../data/pickles/idx_2_char')
+    char_2_idx = load_file('../data/pickles/char_2_idx')
+    idx_2_desc = load_file('../data/pickles/idx_2_desc')
+    desc_2_idx = load_file('../data/pickles/desc_2_idx')
 
 
 if __name__ == '__main__':
