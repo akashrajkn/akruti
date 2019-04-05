@@ -14,6 +14,12 @@ from data import *
 '''
 
 def convert_to_dicts(all_out):
+    '''
+    (Task 3)
+    Find vocabulary, generate dictionary and save files
+    Args:
+        all_out: list of dictionaries. each dictionary contains source, msd, target
+    '''
     source_forms = []
     msds         = []
     target_forms = []
@@ -55,6 +61,7 @@ def convert_to_dicts(all_out):
 
     print('  - Done')
 
+
 def main(filepath):
 
     all_out = read_task_3(filepath)
@@ -69,6 +76,5 @@ def main(filepath):
 
 
 if __name__ == '__main__':
-
-    path = '../data/files/task3_test'
-    main(path)
+    datapath = '../data/files/task3_test'
+    main(datapath)
