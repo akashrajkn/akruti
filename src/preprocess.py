@@ -1,17 +1,8 @@
 import os
 import pickle
 
-from data import *
+from utils import *
 
-'''
-    Vocabulary: unique characters
-    dictionary: idx-to-char: save
-    dictionary: idx-to-morp: save
-
-    input seq : to list of idx
-    morph feat: to list of idx
-    output seq: to lsit of idx
-'''
 
 def convert_to_dicts(all_out):
     '''
