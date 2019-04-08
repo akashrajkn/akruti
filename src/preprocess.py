@@ -32,6 +32,13 @@ def convert_to_dicts(all_out):
                 idx_2_char[vocab_size] = character
                 vocab_size += 1
 
+    char_2_idx['<END>']    = vocab_size
+    idx_2_char[vocab_size] = '<END>'
+    vocab_size            += 1
+    char_2_idx['<PAD>']    = vocab_size
+    idx_2_char[vocab_size] = '<PAD>'
+    vocab_size            += 1
+
     msd_size   = 0
     desc_2_idx = {}
     idx_2_desc = {}
@@ -60,10 +67,10 @@ def main(filepath):
     if not os.path.exists('../data/pickles/idx_2_char'):
         convert_to_dicts(all_out)
 
-    idx_2_char = load_file('../data/pickles/idx_2_char')
-    char_2_idx = load_file('../data/pickles/char_2_idx')
-    idx_2_desc = load_file('../data/pickles/idx_2_desc')
-    desc_2_idx = load_file('../data/pickles/desc_2_idx')
+    # idx_2_char = load_file('../data/pickles/idx_2_char')
+    # char_2_idx = load_file('../data/pickles/char_2_idx')
+    # idx_2_desc = load_file('../data/pickles/idx_2_desc')
+    # desc_2_idx = load_file('../data/pickles/desc_2_idx')
 
 
 if __name__ == '__main__':

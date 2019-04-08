@@ -27,6 +27,9 @@ class MSVED(nn.Module):
         self.z_logvar = nn.Linear(2 * h_dim, z_dim)
 
         # Decoder   -- TODO
+        # Supervised case
+        self.rnn_decode   = nn.GRUCell(input_size=x_dim + msd_size,
+                                       hidden_size=vocab_size)
 
     def encode(x_s):
         source_len = x_s.size()[0]
@@ -49,7 +52,15 @@ class MSVED(nn.Module):
         return mu + eps * std
 
     def decoder(z, y_t):
-        pass
+        target   = []
+        h_decode = torch.seros(self.vocab_size)
+
+        while h_decode != end_char:
+            inp      = torch.cat((z, y_t), 0)
+            h_decode = self.rnn_decode(inp, h_decode)
+            target.append(h_decode)
+
+        return target
 
     def forward(self, x_s, y_t):
 
