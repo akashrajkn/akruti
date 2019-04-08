@@ -31,7 +31,7 @@ class MSVED(nn.Module):
         self.rnn_decode   = nn.GRUCell(input_size=x_dim + msd_size,
                                        hidden_size=vocab_size)
 
-    def encode(x_s):
+    def encode(self, x_s):
         source_len = x_s.size()[0]
         h_forward  = torch.zeros(self.hidden_size)
         h_backward = torch.zeros(self.hidden_size)
@@ -45,13 +45,16 @@ class MSVED(nn.Module):
         mu     = F.relu(self.z_mu(u))
         logvar = F.relu(self.z_logvar(u))
 
+        return mu, logvar
+
+    def reparameterize(self, mu, logvar):
         # Reparam: z = mu + sigma * epsilon
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
 
         return mu + eps * std
 
-    def decoder(z, y_t):
+    def decoder(self, z, y_t):
         target   = []
         h_decode = torch.seros(self.vocab_size)
 
@@ -64,10 +67,8 @@ class MSVED(nn.Module):
 
     def forward(self, x_s, y_t):
 
-        # z  : latent representation of lemma
-        z   = self.encode(x_s)
+        mu, logvar = self.encode(x_s)
+        z          = self.reparameterize(mu, logvar)
+        x_t        = self.decode(z, y_t)
 
-        # x_t: Re-inflected form
-        x_t = self.decode(z, y_t)
-
-        return x_t
+        return x_t, mu, logvar
