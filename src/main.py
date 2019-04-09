@@ -17,12 +17,20 @@ def kl_div(mu, logvar):
     KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
     return KLD
 
+def prepare_sequence(sequence, char_2_idx):
+    pass
+
+def prepare_msd(msd, desc_2_idx):
+    pass
+
 def main():
 
     idx_2_char = load_file('../data/pickles/idx_2_char')
     char_2_idx = load_file('../data/pickles/char_2_idx')
     idx_2_desc = load_file('../data/pickles/idx_2_desc')
     desc_2_idx = load_file('../data/pickles/desc_2_idx')
+
+    training_data = load_file('../data/files/task3_test')
 
     epochs        = 20
     h_dim         = 200
@@ -36,11 +44,12 @@ def main():
     optimizer = optim.SGD(model.parameters(), lr=0.1)
 
     for epoch in range(epochs):
-        for sentence, tags in training_data:
+        for triplet in training_data:
             model.zero_grad()
 
-            x_s               = prepare_sequence(sentence, word_to_ix)
-            x_t               = prepare_sequence(tags, tag_to_ix)
+            x_s               = prepare_sequence(triplet['source_form'], char_2_idx)
+            y_t               = prepare_msd(triplet['MSD'], desc_2_idx)
+            x_t               = prepare_sequence(triplet['target_form'], char_2_idx)
             x_t_p, mu, logvar = model(x_s, y_t)
 
             loss = loss_function(predicted, x_t) + kl_div(mu, logvar)
