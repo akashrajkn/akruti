@@ -14,6 +14,26 @@ def save_file(path, dat):
         pickle.dump(dat, of, protocol=pickle.HIGHEST_PROTOCOL)
 
 
+def max_sequence_length(filepath):
+    '''
+    Return the length of the longest source/target sequence
+    '''
+
+    max_len = 0
+    all_out = read_task_3(filepath)
+
+    for triplet in all_out:
+        source_len = len(triplet['source_form'])
+        target_len = len(triplet['target_form'])
+
+        if (source_len > max_len):
+            max_len = source_len
+
+        if (target_len > max_len):
+            max_len = target_len
+
+    return max_len
+
 def load_file(path):
     '''
     load pickle File

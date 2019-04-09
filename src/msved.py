@@ -48,7 +48,6 @@ class MSVED(nn.Module):
         return mu, logvar
 
     def reparameterize(self, mu, logvar):
-        # Reparam: z = mu + sigma * epsilon
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
 
