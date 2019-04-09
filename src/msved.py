@@ -59,7 +59,7 @@ class MSVED(nn.Module):
         target   = []
         h_decode = torch.zeros(self.vocab_size)
 
-        for i in range(self.max_len)
+        for i in range(self.max_len):
             inp      = torch.cat((z, y_t), 0)
             h_decode = self.rnn_decode(inp, h_decode)
             target.append(h_decode)
