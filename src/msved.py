@@ -8,7 +8,7 @@ torch.manual_seed(1)
 
 
 class MSVED(nn.Module):
-    def __init__(self, h_dim, z_dim, vocab_size, msd_size, max_len, bidirectional=True):
+    def __init__(self, h_dim, z_dim, vocab_size, msd_size, max_len, label_len, bidirectional=True):
         super(MSVED, self).__init__()
 
         # u_dim = 2 * h_dim for bidirectional
@@ -17,6 +17,7 @@ class MSVED(nn.Module):
         self.vocab_size    = vocab_size
         self.msd_size      = msd_size
         self.max_len       = max_len
+        self.label_len     = label_len
         self.bidirectional = bidirectional
 
         # Encoder   --   TODO: Check if I can replace it with GRU layer

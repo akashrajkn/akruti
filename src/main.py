@@ -21,18 +21,46 @@ def prepare_sequence(sequence, char_2_idx, max_seq_len):
     '''
     Append <END> to each sequence and Pad with <PAD>
     '''
-    pass
+    output = []
 
-def prepare_msd(msd, desc_2_idx):
-    pass
+    for char in sequence:
+        output.append(char_2_idx[char])
+
+    output.append(char_2_idx['<END>'])
+
+    while len(output) < max_seq_len:
+        output.append(char_2_idx['<PAD>'])
+
+    return output
+
+def prepare_msd(msd, idx_2_desc, msd_options):
+    '''
+    msd: {'pos': 'verb', 'tense': 'present', 'mod': 'ind'}
+
+    output: [0, 1, 2, 0, 0, ...]
+    '''
+    label_len = len(idx_2_desc)
+    output    = []
+
+    for i in range(label_len):
+        desc = idx_2_desc[i]
+        opt  = msd.get(desc)
+
+        if opt is None:
+            output.append(0)
+            continue
+
+        types = msd_options[i]
+        output.append(types[opt])
+
+    return output
 
 def main():
-
     train_file    = '../data/files/task3_test'
 
     epochs        = 20
-    h_dim         = 200
-    z_dim         = 300
+    h_dim         = 256
+    z_dim         = 150
     vocab_size    = len(char_2_idx)
     msd_size      = len(desc_2_idx)
     bidirectional = True
@@ -41,11 +69,13 @@ def main():
     char_2_idx    = load_file('../data/pickles/char_2_idx')
     idx_2_desc    = load_file('../data/pickles/idx_2_desc')
     desc_2_idx    = load_file('../data/pickles/desc_2_idx')
+    msd_options   = load_file('../data/pickles/msd_options')
 
     training_data = load_file(train_file)
     max_seq_len   = max_sequence_length(train_file) + 1  # +1 is for <END> char
+    label_len     = len(desc_2_idx)
 
-    model = MSVED(h_dim, z_dim, vocab_size, msd_size, max_seq_len, bidirectional=bidirectional)
+    model = MSVED(h_dim, z_dim, vocab_size, msd_size, max_seq_len, label_len, bidirectional=bidirectional)
     loss_function = nn.BCELoss()
     optimizer = optim.SGD(model.parameters(), lr=0.1)
 
@@ -57,11 +87,11 @@ def main():
             model.zero_grad()
 
             x_s               = prepare_sequence(triplet['source_form'], char_2_idx, max_seq_len)
-            y_t               = prepare_msd(triplet['MSD'], desc_2_idx)
+            y_t               = prepare_msd(triplet['MSD'], idx_2_desc, msd_options)
             x_t               = prepare_sequence(triplet['target_form'], char_2_idx, max_seq_len)
             x_t_p, mu, logvar = model(x_s, y_t)
 
-            loss = loss_function(predicted, x_t) + kl_div(mu, logvar)
+            loss = loss_function(x_t_p, x_t) + kl_div(mu, logvar)
 
             loss.backward()
             optimizer.step()

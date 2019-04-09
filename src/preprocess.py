@@ -50,12 +50,29 @@ def convert_to_dicts(all_out):
                 idx_2_desc[msd_size] = key
                 msd_size += 1
 
+    # MSD options dict
+    msd_options = {}
+
+    for key, value in desc_2_idx.items():
+        current_options = {"None": 0}
+        count = 1
+
+        for msd in msds:
+            for k, v in msd.items():
+                if k == key:
+                    if current_options.get(v) is None:
+                        current_options[v] = count
+                        count += 1
+
+        msd_options[value] = current_options
+
     print('Saving (Vocab) dictionaries')
 
-    save_file('../data/pickles/idx_2_char', idx_2_char)
-    save_file('../data/pickles/char_2_idx', char_2_idx)
-    save_file('../data/pickles/idx_2_desc', idx_2_desc)
-    save_file('../data/pickles/desc_2_idx', desc_2_idx)
+    save_file('../data/pickles/idx_2_char',  idx_2_char)
+    save_file('../data/pickles/char_2_idx',  char_2_idx)
+    save_file('../data/pickles/idx_2_desc',  idx_2_desc)
+    save_file('../data/pickles/desc_2_idx',  desc_2_idx)
+    save_file('../data/pickles/msd_options', msd_options)
 
     print('  - Done')
 
@@ -66,6 +83,8 @@ def main(filepath):
 
     if not os.path.exists('../data/pickles/idx_2_char'):
         convert_to_dicts(all_out)
+    else:
+        print('Dictionaries already exist. Re-run')
 
     # idx_2_char = load_file('../data/pickles/idx_2_char')
     # char_2_idx = load_file('../data/pickles/char_2_idx')
