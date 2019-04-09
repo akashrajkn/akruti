@@ -43,12 +43,15 @@ def main():
     desc_2_idx    = load_file('../data/pickles/desc_2_idx')
 
     training_data = load_file(train_file)
-    max_seq_len   = max_sequence_length(train_file)
+    max_seq_len   = max_sequence_length(train_file) + 1  # +1 is for <END> char
 
-    model = MSVED(h_dim, z_dim, vocab_size, msd_size, bidirectional=bidirectional)
+    model = MSVED(h_dim, z_dim, vocab_size, msd_size, max_seq_len, bidirectional=bidirectional)
     loss_function = nn.BCELoss()
     optimizer = optim.SGD(model.parameters(), lr=0.1)
 
+    # TRAIN
+
+    model.train()
     for epoch in range(epochs):
         for triplet in training_data:
             model.zero_grad()

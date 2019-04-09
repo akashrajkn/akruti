@@ -8,7 +8,7 @@ torch.manual_seed(1)
 
 
 class MSVED(nn.Module):
-    def __init__(self, h_dim, z_dim, vocab_size, msd_size, bidirectional=True):
+    def __init__(self, h_dim, z_dim, vocab_size, msd_size, max_len, bidirectional=True):
         super(MSVED, self).__init__()
 
         # u_dim = 2 * h_dim for bidirectional
@@ -16,6 +16,7 @@ class MSVED(nn.Module):
         self.z_dim         = z_dim
         self.vocab_size    = vocab_size
         self.msd_size      = msd_size
+        self.max_len       = max_len
         self.bidirectional = bidirectional
 
         # Encoder   --   TODO: Check if I can replace it with GRU layer
@@ -40,7 +41,7 @@ class MSVED(nn.Module):
             h_forward  = self.rnn_forward(x_s[i], h_forward)
             h_backward = self.rnn_backward(x_s[source_len - i - 1], h_backward)
 
-        # u      : hidden representation of x_s
+        # u: hidden representation of x_s
         u      = torch.cat((h_forward, h_backward), 0)
         mu     = F.relu(self.z_mu(u))
         logvar = F.relu(self.z_logvar(u))
@@ -55,9 +56,9 @@ class MSVED(nn.Module):
 
     def decoder(self, z, y_t):
         target   = []
-        h_decode = torch.seros(self.vocab_size)
+        h_decode = torch.zeros(self.vocab_size)
 
-        while h_decode != end_char:
+        for i in range(self.max_len)
             inp      = torch.cat((z, y_t), 0)
             h_decode = self.rnn_decode(inp, h_decode)
             target.append(h_decode)
