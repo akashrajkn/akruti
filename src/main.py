@@ -56,7 +56,7 @@ def prepare_msd(msd, idx_2_desc, msd_options):
 
         k_output.append(to_categorical([types[opt]], num_classes=len(types))[0])
 
-    return np.concatenate(k_output, axis=0)
+    return torch.from_numpy(np.concatenate(k_output, axis=0))
 
 def main():
     train_file    = '../data/files/task3_test'
@@ -74,16 +74,14 @@ def main():
     msd_size      = len(desc_2_idx)
     bidirectional = True
 
-    # training_data = load_file(train_file)
+    training_data = read_task_3(train_file)
     max_seq_len   = max_sequence_length(train_file) + 1  # +1 is for <END> char
-    label_len     = len(desc_2_idx)
+    label_len     = get_label_length()  # TODO
 
-    print(max_seq_len)
+    print(label_len)
 
-    return
-
-    model = MSVED(h_dim, z_dim, vocab_size, msd_size, max_seq_len, label_len, bidirectional=bidirectional)
-    loss_function = nn.BCELoss()
+    model = MSVED(h_dim, z_dim, vocab_size, max_seq_len, label_len, bidirectional=bidirectional)
+    loss_function = nn.CrossEntropyLoss()
     optimizer = optim.SGD(model.parameters(), lr=0.1)
 
     # TRAIN
@@ -95,10 +93,16 @@ def main():
 
             x_s               = prepare_sequence(triplet['source_form'], char_2_idx, max_seq_len)
             y_t               = prepare_msd(triplet['MSD'], idx_2_desc, msd_options)
-            x_t               = prepare_sequence(triplet['target_form'], char_2_idx, max_seq_len)
+            x_t               = prepare_sequence(triplet['target_form'], char_2_idx, max_seq_len).type(torch.LongTensor)
+            # x_t               = torch.unsqueeze(x_t, 1)
+
             x_t_p, mu, logvar = model(x_s, y_t)
 
-            loss = loss_function(x_t_p, x_t) + kl_div(mu, logvar)
+            # print("------------")
+            # print(x_t_p)
+            # print("------------")
+
+            loss = loss_function(x_t_p, x_t) #+ kl_div(mu, logvar)
 
             loss.backward()
             optimizer.step()

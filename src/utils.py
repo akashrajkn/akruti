@@ -34,6 +34,9 @@ def max_sequence_length(filepath):
 
     return max_len
 
+def get_label_length():
+    return 11
+
 def load_file(path):
     '''
     load pickle File
