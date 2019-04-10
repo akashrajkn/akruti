@@ -72,7 +72,8 @@ def prepare_msd(msd, idx_2_desc, msd_options):
     return torch.from_numpy(np.concatenate(k_output, axis=0))
 
 def main():
-    train_file    = '../data/files/task3_test'
+    # train_file    = '../data/files/task3_test'
+    train_file    = '../data/files/turkish-task3-dev'
 
     idx_2_char    = load_file('../data/pickles/idx_2_char')
     char_2_idx    = load_file('../data/pickles/char_2_idx')
@@ -89,14 +90,13 @@ def main():
 
     training_data = read_task_3(train_file)
     max_seq_len   = max_sequence_length(train_file) + 1  # +1 is for <END> char
-    label_len     = get_label_length()  # TODO
+    label_len     = get_label_length(idx_2_desc, msd_options)
 
     model = MSVED(h_dim, z_dim, vocab_size, max_seq_len, label_len, bidirectional=bidirectional)
     loss_function = nn.CrossEntropyLoss()
     optimizer = optim.SGD(model.parameters(), lr=0.1)
 
     # TRAIN
-
     model.train()
     for epoch in range(epochs):
         epoch_loss = 0
@@ -106,17 +106,16 @@ def main():
             x_s               = prepare_sequence(triplet['source_form'], char_2_idx, max_seq_len)
             y_t               = prepare_msd(triplet['MSD'], idx_2_desc, msd_options)
             x_t               = get_target(triplet['target_form'], char_2_idx, max_seq_len).type(torch.LongTensor)
-
             x_t_p, mu, logvar = model(x_s, y_t)
 
             loss = loss_function(x_t_p, x_t) + kl_div(mu, logvar)
-
             loss.backward()
             optimizer.step()
 
         epoch_loss += loss.detach().cpu()
 
         print('Epoch: {}, Loss: {}'.format(epoch, epoch_loss))
+        # TODO: Add predicted
 
 
 if __name__ == "__main__":

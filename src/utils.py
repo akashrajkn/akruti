@@ -34,8 +34,20 @@ def max_sequence_length(filepath):
 
     return max_len
 
-def get_label_length():
-    return 11
+def get_label_length(idx_2_desc, msd_options):
+
+    total_labels = 0
+    label_len    = len(idx_2_desc)
+
+    for i in range(label_len):
+        types = msd_options[i]
+
+        total_labels += len(types)
+
+    print(total_labels)
+
+    return total_labels
+
 
 def load_file(path):
     '''
