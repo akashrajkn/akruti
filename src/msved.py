@@ -28,7 +28,7 @@ class MSVED(nn.Module):
         self.z_mu     = nn.Linear(2 * h_dim, z_dim)
         self.z_logvar = nn.Linear(2 * h_dim, z_dim)
 
-        # Decoder   -- TODO
+        # Decoder
         # Supervised case
         self.rnn_decode   = nn.GRUCell(input_size=x_dim + msd_size,
                                        hidden_size=vocab_size)

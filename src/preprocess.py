@@ -94,4 +94,7 @@ def main(filepath):
 
 if __name__ == '__main__':
     datapath = '../data/files/task3_test'
+
+    # datapath = '../data/files/turkish-task3-dev'
+
     main(datapath)

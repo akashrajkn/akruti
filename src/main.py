@@ -8,9 +8,10 @@ import time
 
 import numpy    as np
 
-from msved      import *
-from preprocess import *
-from utils      import *
+from keras.utils import to_categorical
+from msved       import *
+from preprocess  import *
+from utils       import *
 
 
 def kl_div(mu, logvar):
@@ -31,7 +32,9 @@ def prepare_sequence(sequence, char_2_idx, max_seq_len):
     while len(output) < max_seq_len:
         output.append(char_2_idx['<PAD>'])
 
-    return output
+    k_output = torch.from_numpy(to_categorical(output, num_classes=len(char_2_idx)))
+
+    return k_output
 
 def prepare_msd(msd, idx_2_desc, msd_options):
     '''
@@ -40,23 +43,29 @@ def prepare_msd(msd, idx_2_desc, msd_options):
     output: [0, 1, 2, 0, 0, ...]
     '''
     label_len = len(idx_2_desc)
-    output    = []
+    k_output  = []
 
     for i in range(label_len):
-        desc = idx_2_desc[i]
-        opt  = msd.get(desc)
+        desc  = idx_2_desc[i]
+        opt   = msd.get(desc)
+        types = msd_options[i]
 
         if opt is None:
-            output.append(0)
+            k_output.append(to_categorical([0], num_classes=len(types))[0])
             continue
 
-        types = msd_options[i]
-        output.append(types[opt])
+        k_output.append(to_categorical([types[opt]], num_classes=len(types))[0])
 
-    return output
+    return np.concatenate(k_output, axis=0)
 
 def main():
     train_file    = '../data/files/task3_test'
+
+    idx_2_char    = load_file('../data/pickles/idx_2_char')
+    char_2_idx    = load_file('../data/pickles/char_2_idx')
+    idx_2_desc    = load_file('../data/pickles/idx_2_desc')
+    desc_2_idx    = load_file('../data/pickles/desc_2_idx')
+    msd_options   = load_file('../data/pickles/msd_options')
 
     epochs        = 20
     h_dim         = 256
@@ -65,15 +74,13 @@ def main():
     msd_size      = len(desc_2_idx)
     bidirectional = True
 
-    idx_2_char    = load_file('../data/pickles/idx_2_char')
-    char_2_idx    = load_file('../data/pickles/char_2_idx')
-    idx_2_desc    = load_file('../data/pickles/idx_2_desc')
-    desc_2_idx    = load_file('../data/pickles/desc_2_idx')
-    msd_options   = load_file('../data/pickles/msd_options')
-
-    training_data = load_file(train_file)
+    # training_data = load_file(train_file)
     max_seq_len   = max_sequence_length(train_file) + 1  # +1 is for <END> char
     label_len     = len(desc_2_idx)
+
+    print(max_seq_len)
+
+    return
 
     model = MSVED(h_dim, z_dim, vocab_size, msd_size, max_seq_len, label_len, bidirectional=bidirectional)
     loss_function = nn.BCELoss()
