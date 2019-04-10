@@ -21,9 +21,6 @@ A word’s form reflects syntactic and semantic categories that are expressed by
 <p align="justify">
 (Zhou and Neubig, 2017) introduce a new framework for labeled sequence transduction problems: multi-space variational encoder-decoders (<a href="https://github.com/akashrajkn/MSVED-morph-reinflection">MSVED</a>). To explain the observed data, this framework employs continuous and discrete latent variables belonging to multiple separate probability distributions.  For the task of morphological re-inflection, source and target word forms (and lemma) are represented by continuous random variables and each of the morphosyntactic descriptions isrepresented by a discrete random variable.  A challenge in this model is performing backprop through discrete random variables, which is addressed by using the Gumbel-Softmax trick (Maddison et al.,2014; Gumbel and Lieblein, 1954).
 </p>
-<p align="justify">
-(Louizos et al., 2017) propose hard concrete distribution, which is obtained by stretching a binary concrete distribution (Maddison et al., 2016) and then transforming its samples with a hard-sigmoid. This distribution is differentiable with respect to its parameters, which allows for straightforward application of gradient descent. 
-</p>
 
 <h3> References </h3>
 
@@ -31,9 +28,7 @@ A word’s form reflects syntactic and semantic categories that are expressed by
   <li align="justify"> Gumbel, E. J. and Lieblein, J. (1954).  Some applications of extreme-value methods. <i>The American Statistician</i>, 8(5):14–17. </li>
 
   <li align="justify"> Kibrik, A. E. (1998).  The handbook of morphology. pages 455–476. </li>
-  
-  <li align="justify"> Louizos, C., Welling, M., and Kingma, D. P. (2017). Learning sparse neural networks through L0 regularization. <i>arXiv preprint arXiv:1712.01312</i>. </li>
-  
+
   <li align="justify"> Maddison, C. J., Mnih, A., and Teh, Y. W. (2016). The  concrete  distribution:  A  continuous relaxation of discrete random variables. <i>arXiv preprint arXiv:1611.00712</i>. </li>
 
   <li align="justify"> Maddison, C. J., Tarlow, D., and Minka, T. (2014). A* sampling. In <i>Advances in Neural Information Processing Systems</i>, pages 3086–3094. </li>
