@@ -72,7 +72,7 @@ class MSVED(nn.Module):
 
             target[i] = out
 
-        return target
+        return target.view(self.max_len * 1, -1)
 
     def forward(self, x_s, y_t):
 

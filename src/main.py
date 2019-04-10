@@ -36,6 +36,19 @@ def prepare_sequence(sequence, char_2_idx, max_seq_len):
 
     return k_output
 
+def get_target(sequence, char_2_idx, max_seq_len):
+    output = []
+
+    for char in sequence:
+        output.append(char_2_idx[char])
+
+    output.append(char_2_idx['<END>'])
+
+    while len(output) < max_seq_len:
+        output.append(char_2_idx['<PAD>'])
+
+    return torch.tensor(output)
+
 def prepare_msd(msd, idx_2_desc, msd_options):
     '''
     msd: {'pos': 'verb', 'tense': 'present', 'mod': 'ind'}
@@ -78,8 +91,6 @@ def main():
     max_seq_len   = max_sequence_length(train_file) + 1  # +1 is for <END> char
     label_len     = get_label_length()  # TODO
 
-    print(label_len)
-
     model = MSVED(h_dim, z_dim, vocab_size, max_seq_len, label_len, bidirectional=bidirectional)
     loss_function = nn.CrossEntropyLoss()
     optimizer = optim.SGD(model.parameters(), lr=0.1)
@@ -88,31 +99,24 @@ def main():
 
     model.train()
     for epoch in range(epochs):
+        epoch_loss = 0
         for triplet in training_data:
             model.zero_grad()
 
             x_s               = prepare_sequence(triplet['source_form'], char_2_idx, max_seq_len)
             y_t               = prepare_msd(triplet['MSD'], idx_2_desc, msd_options)
-            x_t               = prepare_sequence(triplet['target_form'], char_2_idx, max_seq_len).type(torch.LongTensor)
-            # x_t               = torch.unsqueeze(x_t, 1)
+            x_t               = get_target(triplet['target_form'], char_2_idx, max_seq_len).type(torch.LongTensor)
 
             x_t_p, mu, logvar = model(x_s, y_t)
-
-            # print("------------")
-            # print(x_t_p)
-            # print("------------")
 
             loss = loss_function(x_t_p, x_t) #+ kl_div(mu, logvar)
 
             loss.backward()
             optimizer.step()
 
-    with torch.no_grad():
-        inputs = prepare_sequence(training_data[0][0], word_to_ix)
-        tag_scores = model(inputs)
-        print(tag_scores)
+        epoch_loss += loss.detach().cpu()
 
-
+        print('Epoch: {}, Loss: {}'.format(epoch, epoch_loss))
 
 
 if __name__ == "__main__":
