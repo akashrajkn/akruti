@@ -109,7 +109,7 @@ def main():
 
             x_t_p, mu, logvar = model(x_s, y_t)
 
-            loss = loss_function(x_t_p, x_t) #+ kl_div(mu, logvar)
+            loss = loss_function(x_t_p, x_t) + kl_div(mu, logvar)
 
             loss.backward()
             optimizer.step()
