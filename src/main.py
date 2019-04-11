@@ -115,7 +115,25 @@ def main():
         epoch_loss += loss.detach().cpu()
 
         print('Epoch: {}, Loss: {}'.format(epoch, epoch_loss))
-        # TODO: Add predicted
+
+    # TEST
+    test_file = '../data/files/turkish-task3-test'
+    test_data = read_task_3(test_file)
+
+    for triplet in test_data:
+
+        with torch.no_grad():
+            x_s = prepare_sequence(triplet['source_form'], char_2_idx, max_seq_len)
+            y_t = prepare_msd(triplet['MSD'], idx_2_desc, msd_options)
+
+            x_t_p, _, _ = model(x_s, y_t)
+
+            outputs = F.log_softmax(x_t_p, dim=1)
+
+            print('Target: {}')
+
+
+
 
 
 if __name__ == "__main__":
