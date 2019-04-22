@@ -20,14 +20,14 @@ def kl_div(mu, logvar):
 
 def prepare_sequence(sequence, char_2_idx, max_seq_len):
     '''
-    Append <END> to each sequence and Pad with <PAD>
+    Append <EOS> to each sequence and Pad with <PAD>
     '''
-    output = []
+    output = ['SOS']
 
     for char in sequence:
         output.append(char_2_idx[char])
 
-    output.append(char_2_idx['<END>'])
+    output.append(char_2_idx['<EOS>'])
 
     while len(output) < max_seq_len:
         output.append(char_2_idx['<PAD>'])
@@ -37,12 +37,12 @@ def prepare_sequence(sequence, char_2_idx, max_seq_len):
     return k_output
 
 def get_target(sequence, char_2_idx, max_seq_len):
-    output = []
+    output = ['<SOS>']
 
     for char in sequence:
         output.append(char_2_idx[char])
 
-    output.append(char_2_idx['<END>'])
+    output.append(char_2_idx['<EOS>'])
 
     while len(output) < max_seq_len:
         output.append(char_2_idx['<PAD>'])
@@ -89,7 +89,7 @@ def main():
     bidirectional = True
 
     training_data = read_task_3(train_file)
-    max_seq_len   = max_sequence_length(train_file) + 1  # +1 is for <END> char
+    max_seq_len   = max_sequence_length(train_file) + 2  # +2 is for <SOS> & <EOS> char
     label_len     = get_label_length(idx_2_desc, msd_options)
 
     model = MSVED(h_dim, z_dim, vocab_size, max_seq_len, label_len, bidirectional=bidirectional)

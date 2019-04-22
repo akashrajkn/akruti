@@ -32,9 +32,14 @@ def convert_to_dicts(all_out):
                 idx_2_char[vocab_size] = character
                 vocab_size += 1
 
-    char_2_idx['<END>']    = vocab_size
-    idx_2_char[vocab_size] = '<END>'
+    char_2_idx['<EOS>']    = vocab_size
+    idx_2_char[vocab_size] = '<EOS>'
     vocab_size            += 1
+
+    char_2_idx['<SOS>']    = vocab_size
+    idx_2_char[vocab_size] = '<SOS>'
+    vocab_size            += 1
+
     char_2_idx['<PAD>']    = vocab_size
     idx_2_char[vocab_size] = '<PAD>'
     vocab_size            += 1
