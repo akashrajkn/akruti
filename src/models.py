@@ -104,21 +104,21 @@ class Decoder(nn.Module):
         self.attention   = attention
 
         self.embedding   = nn.Embedding(output_dim, emb_dim)
-        self.rnn         = nn.GRU((enc_hid_dim * 2) + emb_dim, dec_hid_dim)
+        self.rnn         = nn.GRU((enc_hid_dim * 2) + emb_dim, dec_hid_dim)  # TODO: fix input dimension
         self.out         = nn.Linear((enc_hid_dim * 2) + dec_hid_dim + emb_dim, output_dim)
         self.dropout     = nn.Dropout(dropout)
 
-    def forward(self, input, hidden, encoder_outputs):
+    def forward(self, input, hidden, tag_embeds, z):
 
         input    = input.unsqueeze(0)
         embedded = self.dropout(self.embedding(input))
-        a        = self.attention(hidden, encoder_outputs)
+        a        = self.attention(hidden, tag_embeds)
         a        = a.unsqueeze(1)
 
-        encoder_outputs = encoder_outputs.permute(1, 0, 2)
-        weighted        = torch.bmm(a, encoder_outputs)
+        tag_embeds      = tag_embeds.permute(1, 0, 2)
+        weighted        = torch.bmm(a, tag_embeds)
         weighted        = weighted.permute(1, 0, 2)
-        rnn_input       = torch.cat((embedded, weighted), dim = 2)
+        rnn_input       = torch.cat((embedded, weighted, z), dim = 2)
         output, hidden  = self.rnn(rnn_input, hidden.unsqueeze(0))
 
         assert (output == hidden).all()
