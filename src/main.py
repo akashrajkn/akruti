@@ -69,7 +69,7 @@ def main():
     desc_2_idx    = helper.load_file('../data/pickles/desc_2_idx')
     msd_options   = helper.load_file('../data/pickles/msd_options')  # label types
 
-    epochs        = 1
+    epochs        = 5
     h_dim         = 256
     z_dim         = 150
     vocab_size    = len(char_2_idx)
@@ -114,11 +114,11 @@ def main():
         epoch_loss = 0
         count      = 0
         for triplet in training_data:
-            model.zero_grad()
+            optimizer.zero_grad()
 
-            x_s               = prepare_sequence(triplet['source_form'], char_2_idx, max_seq_len).to(device)
-            y_t               = prepare_msd(triplet['MSD'], idx_2_desc, msd_options).to(device)
-            x_t               = prepare_sequence(triplet['target_form'], char_2_idx, max_seq_len).to(device)
+            x_s = prepare_sequence(triplet['source_form'], char_2_idx, max_seq_len).to(device)
+            y_t = prepare_msd(triplet['MSD'], idx_2_desc, msd_options).to(device)
+            x_t = prepare_sequence(triplet['target_form'], char_2_idx, max_seq_len).to(device)
 
             x_s = torch.unsqueeze(x_s, 1)
             y_t = torch.unsqueeze(y_t, 1)
@@ -136,15 +136,15 @@ def main():
             current_loss = loss.detach().cpu().item()
             epoch_loss += current_loss
             count += 1
-        print('Epoch: {}, Loss: {}'.format(epoch, epoch_loss / count))
 
+        print('Epoch: {}, Loss: {}'.format(epoch, epoch_loss / count))
 
     print('-' * 13)
     print('  SAVE MODEL')
     print('-' * 13)
 
     torch.save(model, '../models/model-epochs_{}.pt'.format(str(epochs)))
-
+    # return
     print('-' * 13)
     print('    TEST')
     print('-' * 13)
@@ -166,6 +166,8 @@ def main():
 
             x_t_p, _, _ = model(x_s, y_t)
 
+            x_t_p       = x_t_p[1:].view(-1, x_t_p.shape[-1])
+
             outputs     = F.log_softmax(x_t_p, dim=1).type(torch.LongTensor)
             outputs     = torch.squeeze(outputs, 1)
             target_word = ''
@@ -178,7 +180,7 @@ def main():
             print('Predicted: {}'.format(target_word))
 
         count += 1
-        if count == 20:
+        if count == 1:
             break
 
 

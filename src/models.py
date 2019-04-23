@@ -42,7 +42,7 @@ class WordEncoder(nn.Module):
         z_mu             = torch.tanh(self.fc_mu(hidden))
         z_logvar         = torch.tanh(self.fc_sigma(hidden))
 
-        return z_mu, z_logvar
+        return hidden, z_mu, z_logvar
 
 
 class TagEmbedding(nn.Module):
@@ -69,7 +69,7 @@ class Attention(nn.Module):
     '''
     Attention over tag embeddings
     '''
-    def __init__(self, tag_embed_dim=200, dec_hid_dim=256):
+    def __init__(self, tag_embed_dim=200, dec_hid_dim=512):
         '''
         tag_embed_dim -- tag embedding dimension
         dec_hid_dim   -- decoder hidden state dimension
@@ -87,16 +87,13 @@ class Attention(nn.Module):
         batch_size = tag_embeds.shape[1]
         src_len    = tag_embeds.shape[0]
 
-
-        # print('batch_size: {}'.format(batch_size))
-        # print('src_len   : {}'.format(src_len))
-        # print(hidden.size())
-
         hidden     = hidden.unsqueeze(1).repeat(1, src_len, 1)
         tag_embeds = tag_embeds.permute(1, 0, 2)
 
-        energy     = torch.tanh(self.attn(torch.cat((hidden, tag_embeds), dim = 2)))
+        energy     = torch.tanh(self.attn(torch.cat((hidden, tag_embeds), dim=2)))
         energy     = energy.permute(0, 2, 1)
+
+        # print("------")
 
         v          = self.v.repeat(batch_size, 1).unsqueeze(1)
         attention  = torch.bmm(v, energy).squeeze(1)
@@ -105,7 +102,7 @@ class Attention(nn.Module):
 
 
 class WordDecoder(nn.Module):
-    def __init__(self, attention, output_dim, z_dim=150, tag_embed_dim=200, dec_hid_dim=256, dropout=0.4):
+    def __init__(self, attention, output_dim, z_dim=150, tag_embed_dim=200, dec_hid_dim=512, dropout=0.4):
         super(WordDecoder, self).__init__()
 
         self.z_dim         = z_dim
@@ -168,16 +165,13 @@ class MSVED(nn.Module):
         batch_size     = x_s.shape[1]
         trg_vocab_size = self.decoder.output_dim
 
-        # encoder_outputs, hidden = self.encoder(x_s)
-        z_mu, z_logvar = self.encoder(x_s)
+        h, z_mu, z_logvar = self.encoder(x_s)
+
         z              = self.reparameterize(z_mu, z_logvar)
         tag_embeds     = self.tag_embedding(y_t)
 
-        # print('tag_embeds')
-        # print(tag_embeds.size())
-
         outputs        = torch.zeros(self.max_len, batch_size, trg_vocab_size).to(self.device)
-        h              = torch.zeros(1, self.decoder.dec_hid_dim)
+        # h              = torch.zeros(1, self.decoder.dec_hid_dim)
 
         for t in range(1, self.max_len):
             o, h       = self.decoder(h, tag_embeds, z)  # TODO: replace with z_mu
