@@ -32,7 +32,7 @@ def max_sequence_length(filepath):
         if (target_len > max_len):
             max_len = target_len
 
-    return max_len
+    return max_len + 2  # + 2 is for <SOS> & <EOS> char
 
 def get_label_length(idx_2_desc, msd_options):
 
@@ -43,8 +43,6 @@ def get_label_length(idx_2_desc, msd_options):
         types = msd_options[i]
 
         total_labels += len(types)
-
-    print(total_labels)
 
     return total_labels
 

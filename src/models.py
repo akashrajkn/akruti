@@ -7,11 +7,11 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 
-from embedding_mul import EmbeddingMul
+# from embedding_mul import EmbeddingMul
 
 
 class WordEncoder(nn.Module):
-    def __init__(self, input_dim, emb_dim=300, enc_hid_dim=256, dec_hid_dim=150):
+    def __init__(self, input_dim, emb_dim=300, enc_hid_dim=256, dec_hid_dim=150, dropout=0.4):
         '''
         input_dim   -- vocabulary(characters) size
         emb_dim     -- character embedding dimension
@@ -40,9 +40,9 @@ class WordEncoder(nn.Module):
         hidden           = torch.cat((hidden[-2,:,:], hidden[-1,:,:]), dim = 1)
 
         z_mu             = torch.tanh(self.fc_mu(hidden))
-        z_sigma          = torch.tanh(self.fc_sigma(hidden))
+        z_logvar         = torch.tanh(self.fc_sigma(hidden))
 
-        return z_mu, z_sigma
+        return z_mu, z_logvar
 
 
 class TagEmbedding(nn.Module):
@@ -101,7 +101,7 @@ class Attention(nn.Module):
 
 class Decoder(nn.Module):
     def __init__(self, attention, output_dim, z_dim=150, tag_embed_dim=200, dec_hid_dim=256, dropout=0.4):
-        super().__init__()
+        super(Decoder, self).__init__()
 
         self.z_dim         = z_dim
         self.tag_embed_dim = tag_embed_dim
@@ -138,42 +138,39 @@ class Decoder(nn.Module):
 
 
 class MSVED(nn.Module):
-    def __init__(self, encoder, tag_embedding, decoder, device):
-        super(MSVED).__init__()
+    '''
+    Multi-space Variational Encoder-Decoder
+    '''
+    def __init__(self, encoder, tag_embedding, decoder, max_len, device):
+        super(MSVED, self).__init__()
 
         self.encoder       = encoder
         self.tag_embedding = tag_embedding
         self.decoder       = decoder
+
+        self.max_len       = max_len
         self.device        = device
 
     def reparameterize(self, mu, logvar):
-
-        std = torch.exp(0.5*logvar)
+        std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
-        return mu + eps*std
 
-    def forward(self, x_s, y_t, x_t, teacher_forcing_ratio = 0.5):
+        return mu + eps * std
 
+    def forward(self, x_s, y_t):
         batch_size     = x_s.shape[1]
-        max_len        = x_t.shape[0]
         trg_vocab_size = self.decoder.output_dim
 
-        outputs = torch.zeros(max_len, batch_size, trg_vocab_size).to(self.device)
-
         # encoder_outputs, hidden = self.encoder(x_s)
-        z_mu, z_sigma = self.encoder(x_s)
-        z             = self.reparameterize(z_mu, z_sigma)
+        z_mu, z_logvar = self.encoder(x_s)
+        z              = self.reparameterize(z_mu, z_logvar)
+        tag_embeds     = self.tag_embedding(y_t)
 
-        tag_embeds    = self.tag_embedding(y_t)
+        outputs        = torch.zeros(self.max_len, batch_size, trg_vocab_size).to(self.device)
+        h              = torch.zeros_like(outputs)
 
-        output = x_t[0,:]
+        for t in range(1, self.max_len):
+            o, h       = self.decoder(h, tag_embeds, z)  # TODO: replace with z_mu
+            outputs[t] = o
 
-        for t in range(1, max_len):
-            output, hidden = self.decoder(hidden, tag_embeds, z)  # TODO: replace with z_mu
-            outputs[t] = output
-
-            teacher_force = random.random() < teacher_forcing_ratio  # ??
-            top1 = output.max(1)[1]
-            output = (x_t[t] if teacher_force else top1)
-
-        return outputs
+        return outputs, z_mu, z_logvar

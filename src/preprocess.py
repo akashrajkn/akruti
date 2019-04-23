@@ -1,7 +1,8 @@
 import os
 import pickle
+import sys
 
-from utils import *
+from helper import *
 
 
 def convert_to_dicts(all_out):
@@ -25,13 +26,6 @@ def convert_to_dicts(all_out):
     char_2_idx = {}
     idx_2_char = {}
 
-    for word in all_words:
-        for character in word:
-            if char_2_idx.get(character) is None:
-                char_2_idx[character] = vocab_size
-                idx_2_char[vocab_size] = character
-                vocab_size += 1
-
     char_2_idx['<EOS>']    = vocab_size
     idx_2_char[vocab_size] = '<EOS>'
     vocab_size            += 1
@@ -43,6 +37,13 @@ def convert_to_dicts(all_out):
     char_2_idx['<PAD>']    = vocab_size
     idx_2_char[vocab_size] = '<PAD>'
     vocab_size            += 1
+
+    for word in all_words:
+        for character in word:
+            if char_2_idx.get(character) is None:
+                char_2_idx[character] = vocab_size
+                idx_2_char[vocab_size] = character
+                vocab_size += 1
 
     msd_size   = 0
     desc_2_idx = {}
@@ -58,10 +59,11 @@ def convert_to_dicts(all_out):
     # MSD options dict
     msd_options = {}
 
-    for key, value in desc_2_idx.items():
-        current_options = {"None": 0}
-        count = 1
+    count = 0
 
+    for key, value in desc_2_idx.items():
+        current_options = {"None": count}
+        count += 1
         for msd in msds:
             for k, v in msd.items():
                 if k == key:
@@ -82,24 +84,24 @@ def convert_to_dicts(all_out):
     print('  - Done')
 
 
-def main(filepath):
+def main(filepath, rewrite=False):
 
     all_out = read_task_3(filepath)
 
-    if not os.path.exists('../data/pickles/idx_2_char'):
+    if (not os.path.exists('../data/pickles/idx_2_char')) or rewrite:
         convert_to_dicts(all_out)
     else:
         print('Dictionaries already exist. Re-run')
 
-    # idx_2_char = load_file('../data/pickles/idx_2_char')
-    # char_2_idx = load_file('../data/pickles/char_2_idx')
-    # idx_2_desc = load_file('../data/pickles/idx_2_desc')
-    # desc_2_idx = load_file('../data/pickles/desc_2_idx')
-
 
 if __name__ == '__main__':
-    # datapath = '../data/files/task3_test'
-
     datapath = '../data/files/turkish-task3-dev'
 
-    main(datapath)
+    rewrite = False
+
+    if len(sys.argv) <= 1:
+        rewrite = False
+    elif sys.argv[1] == 'rewrite':
+        rewrite = True
+
+    main(datapath, rewrite=rewrite)
