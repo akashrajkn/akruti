@@ -48,8 +48,8 @@ class WordEncoder(nn.Module):
 class TagEmbedding(nn.Module):
     def __init__(self, input_dim, emb_dim=200):
         '''
-        input_dim   -- vocabulary(tags) size
-        emb_dim     -- character embedding dimension
+        input_dim -- vocabulary(tags) size
+        emb_dim   -- character embedding dimension
         '''
         super(TagEmbedding, self).__init__()
 
@@ -66,13 +66,20 @@ class TagEmbedding(nn.Module):
 
 
 class Attention(nn.Module):
-    def __init__(self, enc_hid_dim=200, dec_hid_dim=256):  # TODO: check this
+    '''
+    Attention over tag embeddings
+    '''
+    def __init__(self, tag_embed_dim=200, dec_hid_dim=256):
+        '''
+        tag_embed_dim -- tag embedding dimension
+        dec_hid_dim   -- decoder hidden state dimension
+        '''
         super(Attention, self).__init__()
 
-        self.enc_hid_dim = enc_hid_dim
+        self.tag_embed_dim = tag_embed_dim
         self.dec_hid_dim = dec_hid_dim
 
-        self.attn  = nn.Linear((enc_hid_dim * 2) + dec_hid_dim, dec_hid_dim)
+        self.attn  = nn.Linear(dec_hid_dim + tag_embed_dim, dec_hid_dim)
         self.v     = nn.Parameter(torch.rand(dec_hid_dim))
 
     def forward(self, hidden, tag_embeds):
@@ -109,7 +116,12 @@ class Decoder(nn.Module):
         self.dropout     = nn.Dropout(dropout)
 
     def forward(self, input, hidden, tag_embeds, z):
-
+        '''
+        input      -- previous output of the decoder
+        hidden     -- hidden state of the decoder
+        tag_embeds -- tag embeddings
+        z          -- lemma represented by the latent variable
+        '''
         input    = input.unsqueeze(0)
         embedded = self.dropout(self.embedding(input))
         a        = self.attention(hidden, tag_embeds)
