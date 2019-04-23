@@ -1,7 +1,7 @@
 # pickled data files
 data/pickles/*
 data/files/*
-
+models/*
 
 
 # Byte-compiled / optimized / DLL files
