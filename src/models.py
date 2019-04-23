@@ -87,6 +87,11 @@ class Attention(nn.Module):
         batch_size = tag_embeds.shape[1]
         src_len    = tag_embeds.shape[0]
 
+
+        # print('batch_size: {}'.format(batch_size))
+        # print('src_len   : {}'.format(src_len))
+        # print(hidden.size())
+
         hidden     = hidden.unsqueeze(1).repeat(1, src_len, 1)
         tag_embeds = tag_embeds.permute(1, 0, 2)
 
@@ -99,9 +104,9 @@ class Attention(nn.Module):
         return F.softmax(attention, dim=1)
 
 
-class Decoder(nn.Module):
+class WordDecoder(nn.Module):
     def __init__(self, attention, output_dim, z_dim=150, tag_embed_dim=200, dec_hid_dim=256, dropout=0.4):
-        super(Decoder, self).__init__()
+        super(WordDecoder, self).__init__()
 
         self.z_dim         = z_dim
         self.tag_embed_dim = tag_embed_dim
@@ -119,12 +124,14 @@ class Decoder(nn.Module):
         tag_embeds -- tag embeddings
         z          -- lemma represented by the latent variable
         '''
-        a        = self.attention(hidden, tag_embeds)
-        a        = a.unsqueeze(1)
+        a = self.attention(hidden, tag_embeds)
+        a = a.unsqueeze(1)
+        z = z.unsqueeze(1)  # just for same tensor dimension
 
         tag_embeds      = tag_embeds.permute(1, 0, 2)
         weighted        = torch.bmm(a, tag_embeds)
         weighted        = weighted.permute(1, 0, 2)
+
         rnn_input       = torch.cat((weighted, z), dim = 2)
         output, hidden  = self.rnn(rnn_input, hidden.unsqueeze(0))
 
@@ -166,8 +173,11 @@ class MSVED(nn.Module):
         z              = self.reparameterize(z_mu, z_logvar)
         tag_embeds     = self.tag_embedding(y_t)
 
+        # print('tag_embeds')
+        # print(tag_embeds.size())
+
         outputs        = torch.zeros(self.max_len, batch_size, trg_vocab_size).to(self.device)
-        h              = torch.zeros_like(outputs)
+        h              = torch.zeros(1, self.decoder.dec_hid_dim)
 
         for t in range(1, self.max_len):
             o, h       = self.decoder(h, tag_embeds, z)  # TODO: replace with z_mu
