@@ -100,44 +100,38 @@ class Attention(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, output_dim, emb_dim, enc_hid_dim, dec_hid_dim, dropout, attention):
+    def __init__(self, attention, output_dim, z_dim=150, tag_embed_dim=200, dec_hid_dim=256, dropout=0.4):
         super().__init__()
 
-        self.emb_dim     = emb_dim
-        self.enc_hid_dim = enc_hid_dim
-        self.dec_hid_dim = dec_hid_dim
-        self.output_dim  = output_dim
-        self.dropout     = dropout
-        self.attention   = attention
+        self.z_dim         = z_dim
+        self.tag_embed_dim = tag_embed_dim
+        self.dec_hid_dim   = dec_hid_dim
+        self.output_dim    = output_dim
+        self.attention     = attention
 
-        self.embedding   = nn.Embedding(output_dim, emb_dim)
-        self.rnn         = nn.GRU((enc_hid_dim * 2) + emb_dim, dec_hid_dim)  # TODO: fix input dimension
-        self.out         = nn.Linear((enc_hid_dim * 2) + dec_hid_dim + emb_dim, output_dim)
-        self.dropout     = nn.Dropout(dropout)
+        self.rnn     = nn.GRU(tag_embed_dim + z_dim, dec_hid_dim)
+        self.out     = nn.Linear(tag_embed_dim + dec_hid_dim, output_dim)
+        self.dropout = nn.Dropout(dropout)
 
-    def forward(self, input, hidden, tag_embeds, z):
+    def forward(self, hidden, tag_embeds, z):
         '''
-        input      -- previous output of the decoder
         hidden     -- hidden state of the decoder
         tag_embeds -- tag embeddings
         z          -- lemma represented by the latent variable
         '''
-        input    = input.unsqueeze(0)
-        embedded = self.dropout(self.embedding(input))
         a        = self.attention(hidden, tag_embeds)
         a        = a.unsqueeze(1)
 
         tag_embeds      = tag_embeds.permute(1, 0, 2)
         weighted        = torch.bmm(a, tag_embeds)
         weighted        = weighted.permute(1, 0, 2)
-        rnn_input       = torch.cat((embedded, weighted, z), dim = 2)
+        rnn_input       = torch.cat((weighted, z), dim = 2)
         output, hidden  = self.rnn(rnn_input, hidden.unsqueeze(0))
 
         assert (output == hidden).all()
 
-        embedded = embedded.squeeze(0)
         output   = output.squeeze(0)
         weighted = weighted.squeeze(0)
-        output   = self.out(torch.cat((output, weighted, embedded), dim = 1))
+        output   = self.out(torch.cat((output, weighted), dim = 1))
 
         return output, hidden.squeeze(0)
