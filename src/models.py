@@ -135,3 +135,45 @@ class Decoder(nn.Module):
         output   = self.out(torch.cat((output, weighted), dim = 1))
 
         return output, hidden.squeeze(0)
+
+
+class MSVED(nn.Module):
+    def __init__(self, encoder, tag_embedding, decoder, device):
+        super(MSVED).__init__()
+
+        self.encoder       = encoder
+        self.tag_embedding = tag_embedding
+        self.decoder       = decoder
+        self.device        = device
+
+    def reparameterize(self, mu, logvar):
+
+        std = torch.exp(0.5*logvar)
+        eps = torch.randn_like(std)
+        return mu + eps*std
+
+    def forward(self, x_s, y_t, x_t, teacher_forcing_ratio = 0.5):
+
+        batch_size     = x_s.shape[1]
+        max_len        = x_t.shape[0]
+        trg_vocab_size = self.decoder.output_dim
+
+        outputs = torch.zeros(max_len, batch_size, trg_vocab_size).to(self.device)
+
+        # encoder_outputs, hidden = self.encoder(x_s)
+        z_mu, z_sigma = self.encoder(x_s)
+        z             = self.reparameterize(z_mu, z_sigma)
+
+        tag_embeds    = self.tag_embedding(y_t)
+
+        output = x_t[0,:]
+
+        for t in range(1, max_len):
+            output, hidden = self.decoder(hidden, tag_embeds, z)  # TODO: replace with z_mu
+            outputs[t] = output
+
+            teacher_force = random.random() < teacher_forcing_ratio  # ??
+            top1 = output.max(1)[1]
+            output = (x_t[t] if teacher_force else top1)
+
+        return outputs
