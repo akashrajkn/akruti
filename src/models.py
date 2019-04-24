@@ -18,7 +18,6 @@ class WordEncoder(nn.Module):
         enc_hid_dim -- RNN hidden state dimenion
         dec_hid_dim -- latent variable z dimension
         '''
-
         super(WordEncoder, self).__init__()
 
         self.input_dim   = input_dim
@@ -93,8 +92,6 @@ class Attention(nn.Module):
         energy     = torch.tanh(self.attn(torch.cat((hidden, tag_embeds), dim=2)))
         energy     = energy.permute(0, 2, 1)
 
-        # print("------")
-
         v          = self.v.repeat(batch_size, 1).unsqueeze(1)
         attention  = torch.bmm(v, energy).squeeze(1)
 
@@ -123,7 +120,7 @@ class WordDecoder(nn.Module):
         '''
         a = self.attention(hidden, tag_embeds)
         a = a.unsqueeze(1)
-        z = z.unsqueeze(1)  # just for same tensor dimension
+        z = z.unsqueeze(0)  # For tensor dimension compatibility - see rnn_input
 
         tag_embeds      = tag_embeds.permute(1, 0, 2)
         weighted        = torch.bmm(a, tag_embeds)

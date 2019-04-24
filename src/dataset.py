@@ -14,7 +14,7 @@ from torchvision import transforms, utils
 class MorphologyDatasetTask3(Dataset):
     """Morphology reinflection dataset."""
 
-    def __init__(self, csv_file, language, root_dir='../data/files', delimiter='\t'):
+    def __init__(self, csv_file, language, get_unprocessed=False, root_dir='../data/files', delimiter='\t'):
         """
         Args:
             csv_file (string): Path to the csv file with annotations.
@@ -24,6 +24,8 @@ class MorphologyDatasetTask3(Dataset):
         self.csv_file = csv_file
         self.language = language
         self.root_dir = root_dir
+
+        self.get_unprocessed = get_unprocessed  # raw output. This is not efficient
 
         self.pd_data = pd.read_csv(csv_file, delimiter=delimiter, header=None)
         self.max_seq_len = self._max_sequence_length()
@@ -56,15 +58,12 @@ class MorphologyDatasetTask3(Dataset):
             'target_form': self._prepare_sequence(self.pd_data.iloc[idx, 2])
         }
 
+        if self.get_unprocessed:
+            sample['source_str'] = self.pd_data.iloc[idx, 0]
+            sample['msd_str'] = self.pd_data.iloc[idx, 1]
+            sample['target_str'] = self.pd_data.iloc[idx, 2]
+
         return sample
-
-    def get_unprocessed_strings(self, idx):
-        return {
-            'source_form': self.pd_data.iloc[idx, 0],
-            'msd'        : self.pd_data.iloc[idx, 1],
-            'target_form': self.pd_data.iloc[idx, 2]
-        }
-
 
     def _max_sequence_length(self):
         '''
