@@ -118,20 +118,12 @@ def train(train_dataloader, config, model_file):
         print('         - Time: {}'.format(timedelta(seconds=end - start)))
 
         print('         - Save model')
-        torch.save(model, '../models/model-{}-epoch_{}.pt'.format(model_file, str(epoch)))
+        torch.save(model, '../models/model-{}-epochs_{}.pt'.format(model_file, str(epochs)))
 
     return model
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--train', action='store_true')
-    parser.add_argument('--test',  action='store_true')
-    args = parser.parse_args()
-
-    run_train  = args.train
-    run_test   = args.test
-
     # Set up data
     idx_2_char = load_file('../data/pickles/idx_2_char')
     char_2_idx = load_file('../data/pickles/char_2_idx')
@@ -139,8 +131,17 @@ if __name__ == "__main__":
     desc_2_idx = load_file('../data/pickles/desc_2_idx')
     msd_types  = load_file('../data/pickles/msd_options')  # label types
 
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--train', action='store_true')
+    parser.add_argument('--test',  action='store_true')
+    parser.add_argument("-epochs", action="store", type=int, default=50)
+    args = parser.parse_args()
+
+    run_train  = args.train
+    run_test   = args.test
+
     config = {}
-    config['epochs']        = 5
+    config['epochs']        = args.epochs
     config['h_dim']         = 256
     config['z_dim']         = 150
     config['lambda_m']      = 0.2  # TODO: linear/exp anneal term
