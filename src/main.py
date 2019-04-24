@@ -1,14 +1,14 @@
 import logging
 import argparse
-
-import helper
-
 import numpy as np
 
-from timeit   import default_timer as timer
+from torch.utils.data import DataLoader
+from timeit import default_timer as timer
 from datetime import timedelta
 
-from models   import *
+from models import *
+from helper import load_file, get_label_length
+from dataset import MorphologyDatasetTask3
 
 
 def kl_div(mu, logvar):
@@ -18,46 +18,7 @@ def kl_div(mu, logvar):
     return - 0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
 
 
-def prepare_sequence(sequence, char_2_idx, max_seq_len):
-    '''
-    Append <EOS> to each sequence and Pad with <PAD>
-    '''
-    output = [char_2_idx['<SOS>']]
-
-    for char in sequence:
-        output.append(char_2_idx[char])
-
-    output.append(char_2_idx['<EOS>'])
-
-    while len(output) < max_seq_len:
-        output.append(char_2_idx['<PAD>'])
-
-    return torch.tensor(output).type(torch.LongTensor)
-
-
-def prepare_msd(msd, idx_2_desc, msd_options):
-    '''
-    msd: {'pos': 'verb', 'tense': 'present', 'mod': 'ind'}
-
-    output: [0, 5, 7, 10, ...] length: |label_types|
-    '''
-    label_types = len(idx_2_desc)
-    output  = []
-
-    for i in range(label_types):
-        desc  = idx_2_desc[i]
-        opt   = msd.get(desc)
-        types = msd_options[i]
-
-        if opt is None:
-            opt = 'None'
-
-        output.append(types[opt])
-
-    return torch.tensor(output).type(torch.LongTensor)
-
-
-def test(model, char_2_idx, idx_2_char, max_seq_len, idx_2_desc, msd_options, device, test_file='../data/files/turkish-task3-test'):
+def test(model, test_morph_data, config, idx_2_char):
     '''
     Test function
     TODO implement accuracy
@@ -66,122 +27,143 @@ def test(model, char_2_idx, idx_2_char, max_seq_len, idx_2_desc, msd_options, de
     print('    TEST')
     print('-' * 13)
 
-    test_data = helper.read_task_3(test_file)
-    count     = 0
+    device = config['device']
 
-    for triplet in test_data:
+    for i in range(len(test_morph_data)):
+
+        if i == 10:
+            break
+
         with torch.no_grad():
-            x_s = prepare_sequence(triplet['source_form'], char_2_idx, max_seq_len).to(device)
-            y_t = prepare_msd(triplet['MSD'], idx_2_desc, msd_options).to(device)
+            sample = test_morph_data[i]
 
+            x_s = sample['source_form'].to(device)
             x_s = torch.unsqueeze(x_s, 1)
+            x_s = torch.transpose(x_s, 0, 1)
+
+            y_t = sample['msd'].to(device)
             y_t = torch.unsqueeze(y_t, 1)
+            y_t = torch.transpose(y_t, 0, 1)
 
             x_t_p, _, _ = model(x_s, y_t)
-
             x_t_p       = x_t_p[1:].view(-1, x_t_p.shape[-1])
 
             outputs     = F.log_softmax(x_t_p, dim=1).type(torch.LongTensor)
             outputs     = torch.squeeze(outputs, 1)
-            target_word = ''
 
+            target_word = ''
             for i in outputs:
-                p = np.argmax(i, axis=0).detach().cpu().item()
+                p            = np.argmax(i, axis=0).detach().cpu().item()
                 target_word += idx_2_char[p]
 
-            print('Target   : {}'.format(triplet['target_form']))
+            print('Target   : {}'.format(test_morph_data.get_unprocessed_strings(i)))
             print('Predicted: {}'.format(target_word))
 
-        count += 1
-        if count == 10:
-            break
 
-
-def main():
-    train_file    = '../data/files/turkish-task3-test'
-
-    idx_2_char    = helper.load_file('../data/pickles/idx_2_char')
-    char_2_idx    = helper.load_file('../data/pickles/char_2_idx')
-    idx_2_desc    = helper.load_file('../data/pickles/idx_2_desc')
-    desc_2_idx    = helper.load_file('../data/pickles/desc_2_idx')
-    msd_options   = helper.load_file('../data/pickles/msd_options')  # label types
-
-    epochs        = 5
-    h_dim         = 256
-    z_dim         = 150
-    lambda_m      = 0.2  # TODO: linear/exp anneal term
-    vocab_size    = len(char_2_idx)
-    msd_size      = len(desc_2_idx)
-    bidirectional = True
-
-    training_data = helper.read_task_3(train_file)
-    max_seq_len   = helper.max_sequence_length(train_file)
-    label_len     = helper.get_label_length(idx_2_desc, msd_options)
-
-    device        = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print('device =', device)
-
-    encoder       = WordEncoder(vocab_size)   # TODO: give padding_idx
-    tag_embedding = TagEmbedding(label_len)
+def train(train_dataloader, config, model_file):
+    '''
+    Train function
+    '''
+    device        = config['device']
+    # Model declaration
+    encoder       = WordEncoder(config['vocab_size'])   # TODO: give padding_idx
+    tag_embedding = TagEmbedding(config['label_len'])
     attention     = Attention()
-    decoder       = WordDecoder(attention, vocab_size)
-
-    model         = MSVED(encoder, tag_embedding, decoder, max_seq_len, device).to(device)
-
-    print('-' * 13)
-    print('    MODEL')
-    print('-' * 13)
-    print(model)
-
+    decoder       = WordDecoder(attention, config['vocab_size'])
+    model         = MSVED(encoder, tag_embedding, decoder, config['max_seq_len'], device).to(device)
     loss_function = nn.CrossEntropyLoss()
     optimizer     = optim.SGD(model.parameters(), lr=0.1)
 
-    # TRAIN
     print('-' * 13)
-    print('    TRAIN')
+    print('    DEVICE =', device)
+    print('-' * 13)
+    print('    MODEL  :')
+    print(model)
+    print('-' * 13)
+    print('    TRAIN  :')
     print('-' * 13)
 
     model.train()
-    for epoch in range(epochs):
-        start = timer()
+    for epoch in range(config['epochs']):
+
+        start      = timer()
         epoch_loss = 0
         count      = 0
 
-        for triplet in training_data:
+        for i_batch, sample_batched in enumerate(train_dataloader):
             optimizer.zero_grad()
 
-            x_s = prepare_sequence(triplet['source_form'], char_2_idx, max_seq_len).to(device)
-            y_t = prepare_msd(triplet['MSD'], idx_2_desc, msd_options).to(device)
-            x_t = prepare_sequence(triplet['target_form'], char_2_idx, max_seq_len).to(device)
+            x_s = sample_batched['source_form'].to(device)
+            y_t = sample_batched['msd'].to(device)
+            x_t = sample_batched['target_form'].to(device)
 
-            x_s = torch.unsqueeze(x_s, 1)
-            y_t = torch.unsqueeze(y_t, 1)
-            x_t = torch.unsqueeze(x_t, 1)
+            x_s = torch.transpose(x_s, 0, 1)
+            y_t = torch.transpose(y_t, 0, 1)
+            x_t = torch.transpose(x_t, 0, 1)
 
             x_t_p, mu, logvar = model(x_s, y_t)
 
             x_t_p = x_t_p[1:].view(-1, x_t_p.shape[-1])
             x_t   = x_t[1:].view(-1)
 
-            loss = loss_function(x_t_p, x_t) + lambda_m * kl_div(mu, logvar)
+            loss = loss_function(x_t_p, x_t) + config['lambda_m'] * kl_div(mu, logvar)
             loss.backward()
             optimizer.step()
 
             current_loss = loss.detach().cpu().item()
-            epoch_loss += current_loss
-            count += 1
+            epoch_loss  += current_loss
+            count       += 1
+            break
 
         end = timer()
+        break
 
         print('Epoch: {}, Loss: {}'.format(epoch, epoch_loss / count))
         print('         - Time: {}'.format(timedelta(seconds=end - start)))
-        print('         - Save model')
-        torch.save(model, '../models/model-turkish-train-epoch_{}.pt'.format(str(epochs)))
 
-    test(model, char_2_idx, idx_2_char, max_seq_len, idx_2_desc, msd_options, device)
+        print('         - Save model')
+        torch.save(model, '../models/model-{}-epoch_{}.pt'.format(model_file, str(epoch)))
+
+    return model
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    main()
+    # Set up data
+    idx_2_char = load_file('../data/pickles/idx_2_char')
+    char_2_idx = load_file('../data/pickles/char_2_idx')
+    idx_2_desc = load_file('../data/pickles/idx_2_desc')
+    desc_2_idx = load_file('../data/pickles/desc_2_idx')
+    msd_types  = load_file('../data/pickles/msd_options')  # label types
+
+    config = {}
+    config['epochs']        = 5
+    config['h_dim']         = 256
+    config['z_dim']         = 150
+    config['lambda_m']      = 0.2  # TODO: linear/exp anneal term
+    config['bidirectional'] = True
+    config['batch_size']    = 1
+    config['device']        = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    config['vocab_size']    = len(char_2_idx)
+    config['label_len']     = get_label_length(idx_2_desc, msd_types)  # TODO: move this to Dataset class
+
+    # Get train_dataloader
+    train_file       = 'turkish-task3-test'
+    language         = 'turkish'
+    morph_data       = MorphologyDatasetTask3(csv_file='../data/files/{}.csv'.format(train_file), language=language)
+    morph_data.set_vocabulary(char_2_idx, idx_2_char, desc_2_idx, idx_2_desc, msd_types)
+    train_dataloader = DataLoader(morph_data, batch_size=config['batch_size'], shuffle=True, num_workers=2)
+
+    config['max_seq_len'] = morph_data.max_seq_len
+
+    # TRAIN
+    model = train(train_dataloader, config, model_file=train_file)
+
+    # Get test_dataloader
+    test_file             = 'turkish-task3-test'
+    test_morph_data       = MorphologyDatasetTask3(csv_file='../data/files/{}.csv'.format(test_file), language=language)
+    test_morph_data.set_vocabulary(char_2_idx, idx_2_char, desc_2_idx, idx_2_desc, msd_types)
+
+    # TEST
+    test(model, test_morph_data, config, idx_2_char)

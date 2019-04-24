@@ -174,7 +174,7 @@ class MSVED(nn.Module):
         # h              = torch.zeros(1, self.decoder.dec_hid_dim)
 
         for t in range(1, self.max_len):
-            o, h       = self.decoder(h, tag_embeds, z)  # TODO: replace with z_mu
+            o, h       = self.decoder(h, tag_embeds, z_mu)  # TODO: replace with z_mu
             outputs[t] = o
 
         return outputs, z_mu, z_logvar
