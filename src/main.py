@@ -18,7 +18,7 @@ def kl_div(mu, logvar):
     return - 0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
 
 
-def test(model, test_dataloader, config, idx_2_char):
+def test(model, test_dataloader, config, idx_2_char, guesses_file):
     '''
     Test function
     TODO implement accuracy
@@ -29,9 +29,9 @@ def test(model, test_dataloader, config, idx_2_char):
 
     device = config['device']
 
+    output = ''
+
     for i_batch, sample_batched in enumerate(test_dataloader):
-        if i_batch == 10:  # FIXME: Remove this later
-            break
 
         with torch.no_grad():
             x_s = sample_batched['source_form'].to(device)
@@ -48,11 +48,20 @@ def test(model, test_dataloader, config, idx_2_char):
 
             target_word = ''
             for i in outputs:
-                p            = np.argmax(i, axis=0).detach().cpu().item()
+                p      = np.argmax(i, axis=0).detach().cpu().item()
+                entity = idx_2_char[p]
+
+                if entity == '<SOS>':
+                    continue
+                elif entity == '<PAD>' or entity == '<EOS>':
+                    break
+
                 target_word += idx_2_char[p]
 
-            print('Target   : {}'.format(sample_batched['target_str'][0]))
-            print('Predicted: {}'.format(target_word))
+            output += '{}\t{}\t{}\n'.format(sample_batched['source_str'][0], sample_batched['msd_str'][0], target_word)
+
+    with open('../results/{}'.format(guesses_file), 'w+', encoding="utf-8") as f:
+        f.write(output)
 
 
 def train(train_dataloader, config, model_file):
@@ -167,7 +176,7 @@ if __name__ == "__main__":
     # TEST
     if run_test:
         if not run_train:
-            model = torch.load('../models/model-{}-epoch_{}.pt'.format(train_file, str(config['epochs'] - 1)))
+            model = torch.load('../models/model-{}-epochs_{}.pt'.format(train_file, str(config['epochs'])))
 
         # Get test_dataloader
         test_file             = '{}-task3-test'.format(config['language'])
@@ -175,4 +184,4 @@ if __name__ == "__main__":
         test_morph_data.set_vocabulary(char_2_idx, idx_2_char, desc_2_idx, idx_2_desc, msd_types)
         test_dataloader       = DataLoader(test_morph_data, batch_size=1, shuffle=False, num_workers=1)
 
-        test(model, test_dataloader, config, idx_2_char)
+        test(model, test_dataloader, config, idx_2_char, '{}-task3-guesses'.format(config['language']))
