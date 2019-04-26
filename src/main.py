@@ -118,7 +118,7 @@ def train(train_dataloader, config, model_file):
         print('         - Time: {}'.format(timedelta(seconds=end - start)))
 
         print('         - Save model')
-        torch.save(model, '../models/model-{}-epochs_{}.pt'.format(model_file, str(epochs)))
+        torch.save(model, '../models/model-{}-epochs_{}.pt'.format(model_file, str(config['epochs'])))
 
     return model
 
