@@ -1,24 +1,11 @@
 import torch.nn as nn
 import torch
-from functools import reduce
-from operator import mul
-from utils import get_logger
 
 """Implements the EmbeddingMul class
 Author: Noémien Kocher
 Date: Fall 2018
 Unit test: embedding_mul_test.py
 """
-
-logger = None
-
-
-# A pytorch module can not have a logger as its attrbute, because
-# it then cannot be serialized.
-def set_logger(alogger):
-    global logger
-    logger = alogger
-
 
 class EmbeddingMul(nn.Module):
     """This class implements a custom embedding mudule which uses matrix
@@ -33,7 +20,7 @@ class EmbeddingMul(nn.Module):
         # i.e the dictionnary size
         self.depth = depth
         self.device = device
-        self.ones = torch.eye(depth, requires_grad=False, device=self.device)
+        self.ones = torch.eye(depth, requires_grad=False)#, device=self.device)
         self._requires_grad = False
         # "oh" means One Hot
         self.last_oh = None
