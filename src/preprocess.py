@@ -58,12 +58,10 @@ def convert_to_dicts(all_out):
 
     # MSD options dict
     msd_options = {}
-
-    count = 0
+    count       = 0
 
     for key, value in desc_2_idx.items():
-        current_options = {"None": count}
-        count += 1
+        current_options = {}
         for msd in msds:
             for k, v in msd.items():
                 if k == key:

@@ -5,10 +5,11 @@ import torch
 
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, utils
+
+from helper import get_label_length
 
 
 class MorphologyDatasetTask3(Dataset):
@@ -25,19 +26,10 @@ class MorphologyDatasetTask3(Dataset):
         self.language = language
         self.root_dir = root_dir
 
-        self.get_unprocessed = get_unprocessed  # raw output. This is not efficient
+        self.get_unprocessed = get_unprocessed  # raw output. FIXME: This is not efficient
 
-        self.pd_data = pd.read_csv(csv_file, delimiter=delimiter, header=None)
+        self.pd_data     = pd.read_csv(csv_file, delimiter=delimiter, header=None)
         self.max_seq_len = self._max_sequence_length()
-
-    def set_vocabulary(self, char_2_idx, idx_2_char, desc_2_idx, idx_2_desc, msd_types):
-        # TODO: create a Vocabulary class later on
-        self.char_2_idx  = char_2_idx
-        self.idx_2_char  = idx_2_char
-        self.desc_2_idx  = desc_2_idx
-        self.idx_2_desc  = idx_2_desc
-        self.msd_types   = msd_types
-        self.padding_idx = char_2_idx['<PAD>']
 
     def __len__(self):
         return len(self.pd_data)
@@ -64,6 +56,16 @@ class MorphologyDatasetTask3(Dataset):
             sample['target_str'] = self.pd_data.iloc[idx, 2]
 
         return sample
+
+    def set_vocabulary(self, char_2_idx, idx_2_char, desc_2_idx, idx_2_desc, msd_types):
+        # TODO: create a Vocabulary class later on
+        self.char_2_idx  = char_2_idx
+        self.idx_2_char  = idx_2_char
+        self.desc_2_idx  = desc_2_idx
+        self.idx_2_desc  = idx_2_desc
+        self.msd_types   = msd_types
+        self.padding_idx = char_2_idx['<PAD>']
+        self.label_len   = get_label_length(idx_2_desc, msd_types)
 
     def _max_sequence_length(self):
         '''
@@ -102,19 +104,15 @@ class MorphologyDatasetTask3(Dataset):
     def _prepare_msd(self, msd):
         '''
         msd   : {'pos': 'verb', 'tense': 'present', 'mod': 'ind'}
-        output: [0, 5, 7, 10, ...] length: |label_types|
+        # output: [0, 5, 7, 10, ...] length: |label_types|
+        output: [0, 1, 0, 0, ....] length: |label_len|
         '''
-        label_types = len(self.idx_2_desc)
-        output  = []
+        output  = [0] * self.label_len
+        # print(msd)
+        for k, v in msd.items():
+            desc_idx = self.desc_2_idx[k]
+            msd_idx  = self.msd_types[desc_idx][v]
 
-        for i in range(label_types):
-            desc  = self.idx_2_desc[i]
-            opt   = msd.get(desc)
-            types = self.msd_types[i]
+            output[msd_idx] = 1
 
-            if opt is None:
-                opt = 'None'
-
-            output.append(types[opt])
-
-        return torch.tensor(output).type(torch.LongTensor)
+        return torch.tensor(output).type(torch.FloatTensor)

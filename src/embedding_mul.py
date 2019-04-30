@@ -20,7 +20,7 @@ class EmbeddingMul(nn.Module):
         # i.e the dictionnary size
         self.depth = depth
         self.device = device
-        self.ones = torch.eye(depth, requires_grad=False)#, device=self.device)
+        self.ones = torch.eye(depth, requires_grad=False, device=self.device)
         self._requires_grad = False
         # "oh" means One Hot
         self.last_oh = None
@@ -75,7 +75,7 @@ class EmbeddingMul(nn.Module):
     def to_one_hot(self, input):
         # Returns a new tensor that doesn't share memory
         result = torch.index_select(
-            self.ones, 0, input.view(-1).long()).view(
+            self.ones, 0, input.contiguous().view(-1).long()).view(
             input.size()+(self.depth,))
         result.requires_grad = self.requires_grad
         return result

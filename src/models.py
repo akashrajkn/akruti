@@ -7,11 +7,9 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 
-# from embedding_mul import EmbeddingMul
-
 
 class WordEncoder(nn.Module):
-    def __init__(self, input_dim, emb_dim=300, enc_hid_dim=256, dec_hid_dim=150, dropout=0.4):
+    def __init__(self, input_dim, emb_dim=300, enc_hid_dim=256, dec_hid_dim=150, dropout=0.4, device=None):
         '''
         input_dim   -- vocabulary(characters) size
         emb_dim     -- character embedding dimension
@@ -24,8 +22,8 @@ class WordEncoder(nn.Module):
         self.emb_dim     = emb_dim
         self.enc_hid_dim = enc_hid_dim
         self.dec_hid_dim = dec_hid_dim
+        self.device      = device
 
-        # TODO: replace with EmbeddingMul
         self.embedding   = nn.Embedding(input_dim, emb_dim)
         self.rnn         = nn.GRU(emb_dim, enc_hid_dim, bidirectional = True)
         self.fc_mu       = nn.Linear(enc_hid_dim * 2, dec_hid_dim)
@@ -45,21 +43,28 @@ class WordEncoder(nn.Module):
 
 
 class TagEmbedding(nn.Module):
-    def __init__(self, input_dim, emb_dim=200):
+    def __init__(self, input_dim, emb_dim=200, device=None):
         '''
-        input_dim -- vocabulary(tags) size
-        emb_dim   -- character embedding dimension
+        input_dim  -- vocabulary(tags) size
+        emb_dim    -- character embedding dimension
+        device     -- cuda or cpu
         '''
         super(TagEmbedding, self).__init__()
 
         self.input_dim = input_dim
         self.emb_dim   = emb_dim
+        self.device    = device
 
-        # TODO: replace with EmbeddingMul
-        self.embedding = nn.Embedding(input_dim, emb_dim)
+        # TODO: init this matrix
+        self.embedding = nn.Parameter(torch.FloatTensor(input_dim, emb_dim))
 
     def forward(self, src):
-        embedded       = self.embedding(src)
+        src      = src.permute(1, 0)
+        src      = src.unsqueeze(1)
+
+        embedded = torch.stack(
+            [torch.mm(batch.float(), self.embedding)
+             for batch in src], dim=0)
 
         return embedded
 
@@ -76,19 +81,20 @@ class Attention(nn.Module):
         super(Attention, self).__init__()
 
         self.tag_embed_dim = tag_embed_dim
-        self.dec_hid_dim = dec_hid_dim
+        self.dec_hid_dim   = dec_hid_dim
 
         self.attn  = nn.Linear(dec_hid_dim + tag_embed_dim, dec_hid_dim)
         self.v     = nn.Parameter(torch.rand(dec_hid_dim))
 
     def forward(self, hidden, tag_embeds):
-
-        batch_size = tag_embeds.shape[1]
-        src_len    = tag_embeds.shape[0]
+        '''
+        hidden     -- hidden state of the decoder
+        tag_embeds -- tag embeddings
+        '''
+        batch_size = tag_embeds.shape[0]
+        src_len    = tag_embeds.shape[1]
 
         hidden     = hidden.unsqueeze(1).repeat(1, src_len, 1)
-        tag_embeds = tag_embeds.permute(1, 0, 2)
-
         energy     = torch.tanh(self.attn(torch.cat((hidden, tag_embeds), dim=2)))
         energy     = energy.permute(0, 2, 1)
 
@@ -122,18 +128,18 @@ class WordDecoder(nn.Module):
         a = a.unsqueeze(1)
         z = z.unsqueeze(0)  # For tensor dimension compatibility - see rnn_input
 
-        tag_embeds      = tag_embeds.permute(1, 0, 2)
-        weighted        = torch.bmm(a, tag_embeds)
-        weighted        = weighted.permute(1, 0, 2)
+        weighted       = torch.bmm(a, tag_embeds)
+        weighted       = weighted.permute(1, 0, 2)
 
-        rnn_input       = torch.cat((weighted, z), dim = 2)
-        output, hidden  = self.rnn(rnn_input, hidden.unsqueeze(0))
+        rnn_input      = torch.cat((weighted, z), dim=2)
+        output, hidden = self.rnn(rnn_input, hidden.unsqueeze(0))
 
-        assert (output == hidden).all()
+        # TODO: Find out why this is required
+        # assert (output == hidden).all()
 
         output   = output.squeeze(0)
         weighted = weighted.squeeze(0)
-        output   = self.out(torch.cat((output, weighted), dim = 1))
+        output   = self.out(torch.cat((output, weighted), dim=1))
 
         return output, hidden.squeeze(0)
 
@@ -158,20 +164,24 @@ class MSVED(nn.Module):
 
         return mu + eps * std
 
-    def forward(self, x_s, y_t):
+    def forward(self, x_s, y_t=None):
+        # Semi sup
+        if y_t is None:
+            pass
+
         batch_size     = x_s.shape[1]
         trg_vocab_size = self.decoder.output_dim
 
-        h, z_mu, z_logvar = self.encoder(x_s)
+        h, mu_u, logvar_u = self.encoder(x_s)
 
-        z              = self.reparameterize(z_mu, z_logvar)
+        z              = self.reparameterize(mu_u, logvar_u)
         tag_embeds     = self.tag_embedding(y_t)
 
         outputs        = torch.zeros(self.max_len, batch_size, trg_vocab_size).to(self.device)
         # h              = torch.zeros(1, self.decoder.dec_hid_dim)
 
         for t in range(1, self.max_len):
-            o, h       = self.decoder(h, tag_embeds, z_mu)  # TODO: replace with z_mu
+            o, h       = self.decoder(h, tag_embeds, mu_u)  # TODO: replace with z_mu
             outputs[t] = o
 
-        return outputs, z_mu, z_logvar
+        return outputs, mu_u, logvar_u

@@ -1,12 +1,17 @@
 import logging
 import argparse
+
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import torch.nn.functional as F
 import numpy as np
 
 from torch.utils.data import DataLoader
 from timeit import default_timer as timer
 from datetime import timedelta
 
-from models import *
+from models import WordEncoder, Attention, TagEmbedding, WordDecoder, MSVED
 from helper import load_file, get_label_length
 from dataset import MorphologyDatasetTask3
 
@@ -28,7 +33,6 @@ def test(model, test_dataloader, config, idx_2_char, guesses_file):
     print('-' * 13)
 
     device = config['device']
-
     output = ''
 
     for i_batch, sample_batched in enumerate(test_dataloader):
@@ -70,8 +74,8 @@ def train(train_dataloader, config, model_file):
     '''
     device        = config['device']
     # Model declaration
-    encoder       = WordEncoder(config['vocab_size'])   # TODO: give padding_idx
-    tag_embedding = TagEmbedding(config['label_len'])
+    encoder       = WordEncoder(config['vocab_size'], device=device)  # TODO: give padding_idx
+    tag_embedding = TagEmbedding(config['label_len'], device=device)
     attention     = Attention()
     decoder       = WordDecoder(attention, config['vocab_size'])
     model         = MSVED(encoder, tag_embedding, decoder, config['max_seq_len'], device).to(device)
@@ -140,34 +144,35 @@ if __name__ == "__main__":
     desc_2_idx = load_file('../data/pickles/desc_2_idx')
     msd_types  = load_file('../data/pickles/msd_options')  # label types
 
-    parser = argparse.ArgumentParser()
+    parser     = argparse.ArgumentParser()
     parser.add_argument('--train', action='store_true')
     parser.add_argument('--test',  action='store_true')
     parser.add_argument("-epochs", action="store", type=int, default=50)
-    args = parser.parse_args()
+    args       = parser.parse_args()
 
     run_train  = args.train
     run_test   = args.test
 
-    config = {}
+    config                  = {}
     config['epochs']        = args.epochs
     config['h_dim']         = 256
     config['z_dim']         = 150
     config['lambda_m']      = 0.2  # TODO: linear/exp anneal term
     config['bidirectional'] = True
-    config['batch_size']    = 64
+    config['batch_size']    = 256
     config['device']        = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     config['vocab_size']    = len(char_2_idx)
-    config['label_len']     = get_label_length(idx_2_desc, msd_types)  # TODO: move this to Dataset class
     config['language']      = 'turkish'
+    # config['label_len']     = get_label_length(idx_2_desc, msd_types)
 
     # Get train_dataloader
     train_file       = '{}-task3-train'.format(config['language'])
     morph_data       = MorphologyDatasetTask3(csv_file='../data/files/{}.csv'.format(train_file), language=config['language'])
     morph_data.set_vocabulary(char_2_idx, idx_2_char, desc_2_idx, idx_2_desc, msd_types)
-    train_dataloader = DataLoader(morph_data, batch_size=config['batch_size'], shuffle=True, num_workers=2)
+    train_dataloader = DataLoader(morph_data, batch_size=config['batch_size'], shuffle=True, num_workers=2, drop_last=True)
 
-    config['max_seq_len'] = morph_data.max_seq_len
+    config['max_seq_len']   = morph_data.max_seq_len
+    config['label_len']     = morph_data.label_len
 
     # TRAIN
     if run_train:
@@ -182,6 +187,6 @@ if __name__ == "__main__":
         test_file             = '{}-task3-test'.format(config['language'])
         test_morph_data       = MorphologyDatasetTask3(csv_file='../data/files/{}.csv'.format(test_file), language=config['language'], get_unprocessed=True)
         test_morph_data.set_vocabulary(char_2_idx, idx_2_char, desc_2_idx, idx_2_desc, msd_types)
-        test_dataloader       = DataLoader(test_morph_data, batch_size=1, shuffle=False, num_workers=1)
+        test_dataloader       = DataLoader(test_morph_data, batch_size=1, shuffle=False, num_workers=2)
 
         test(model, test_dataloader, config, idx_2_char, '{}-task3-guesses'.format(config['language']))
