@@ -94,6 +94,7 @@ def main(filepath, rewrite=False):
 
 if __name__ == '__main__':
     datapath = '../data/files/turkish-task3-train.csv'
+    # datapath = '../data/files/english_csv_test.csv'
 
     rewrite = False
 

@@ -45,7 +45,7 @@ class WordEncoder(nn.Module):
 class TagEmbedding(nn.Module):
     def __init__(self, input_dim, emb_dim=200, device=None):
         '''
-        input_dim  -- vocabulary(tags) size
+        input_dim  -- label length
         emb_dim    -- character embedding dimension
         device     -- cuda or cpu
         '''
@@ -58,12 +58,9 @@ class TagEmbedding(nn.Module):
         self.embedding = nn.Parameter(torch.rand(input_dim, emb_dim))
 
     def forward(self, src):
-        src      = src.permute(1, 0)
-        src      = src.unsqueeze(1)
-
-        embedded = torch.stack(
-            [torch.mm(batch.float(), self.embedding)
-             for batch in src], dim=0)
+        src      = src.permute(1, 0, 2)
+        embedded = torch.stack([torch.mm(batch.float(), self.embedding)
+                                for batch in src], dim=0)
 
         return embedded
 
@@ -90,8 +87,9 @@ class Attention(nn.Module):
         hidden     -- hidden state of the decoder
         tag_embeds -- tag embeddings
         '''
+        # FIXME: Attention module is wrong
         batch_size = tag_embeds.shape[0]
-        src_len    = tag_embeds.shape[1]
+        src_len    = tag_embeds.shape[1]  # Should be seq_len: 11 in the case of Turkish
 
         hidden     = hidden.unsqueeze(1).repeat(1, src_len, 1)
         energy     = torch.tanh(self.attn(torch.cat((hidden, tag_embeds), dim=2)))
@@ -99,6 +97,12 @@ class Attention(nn.Module):
 
         v          = self.v.repeat(batch_size, 1).unsqueeze(1)
         attention  = torch.bmm(v, energy).squeeze(1)
+
+        # print('Hidden size:    {}'.format(str(hidden.size())))
+        # print('Tag Embed size: {}'.format(str(tag_embeds.size())))
+        # print('v size:         {}'.format(str(v.size())))
+        # print('energy size:    {}'.format(str(energy.size())))
+        # print('attention size: {}'.format(str(attention.size())))
 
         return F.softmax(attention, dim=1)
 
@@ -124,8 +128,13 @@ class WordDecoder(nn.Module):
         z          -- lemma represented by the latent variable
         '''
         a = self.attention(hidden, tag_embeds)
+
         a = a.unsqueeze(1)
         z = z.unsqueeze(0)  # For tensor dimension compatibility - see rnn_input
+
+        # print(a.size())
+        # print(z.size())
+        # print(tag_embeds.size())
 
         weighted       = torch.bmm(a, tag_embeds)
         weighted       = weighted.permute(1, 0, 2)
@@ -170,12 +179,12 @@ class MSVED(nn.Module):
 
         batch_size     = x_s.shape[1]
         trg_vocab_size = self.decoder.output_dim
+        outputs        = torch.zeros(self.max_len, batch_size, trg_vocab_size).to(self.device)
 
         h, mu_u, logvar_u = self.encoder(x_s)
 
         z              = self.reparameterize(mu_u, logvar_u)
         tag_embeds     = self.tag_embedding(y_t)
-        outputs        = torch.zeros(self.max_len, batch_size, trg_vocab_size).to(self.device)
 
         for t in range(1, self.max_len):
             o, h       = self.decoder(h, tag_embeds, mu_u)

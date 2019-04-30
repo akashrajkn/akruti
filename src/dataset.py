@@ -65,7 +65,7 @@ class MorphologyDatasetTask3(Dataset):
         self.idx_2_desc  = idx_2_desc
         self.msd_types   = msd_types
         self.padding_idx = char_2_idx['<PAD>']
-        self.label_len   = get_label_length(idx_2_desc, msd_types)
+        self.label_len   = get_label_length(idx_2_desc, msd_types) + 1  # last index is for None
 
     def _max_sequence_length(self):
         '''
@@ -107,12 +107,21 @@ class MorphologyDatasetTask3(Dataset):
         # output: [0, 5, 7, 10, ...] length: |label_types|
         output: [0, 1, 0, 0, ....] length: |label_len|
         '''
-        output  = [0] * self.label_len
-        # print(msd)
-        for k, v in msd.items():
-            desc_idx = self.desc_2_idx[k]
-            msd_idx  = self.msd_types[desc_idx][v]
+        label_types = len(self.idx_2_desc)
+        output      = []
 
-            output[msd_idx] = 1
+        for i in range(label_types):
+            one_hot = [0] * self.label_len
+
+            desc  = self.idx_2_desc[i]
+            opt   = msd.get(desc)
+            types = self.msd_types[i]
+
+            if opt is None:
+                one_hot[self.label_len - 1] = 1
+            else:
+                one_hot[types[opt]] = 1
+
+            output.append(one_hot)
 
         return torch.tensor(output).type(torch.FloatTensor)

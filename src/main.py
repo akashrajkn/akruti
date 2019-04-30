@@ -120,7 +120,7 @@ def train(train_dataloader, config, model_file):
             x_t_p = x_t_p[1:].view(-1, x_t_p.shape[-1])
             x_t   = x_t[1:].contiguous().view(-1)
 
-            loss  = loss_function(x_t_p, x_t) - kl_weight * kl_div(mu, logvar)
+            loss  = loss_function(x_t_p, x_t) + kl_weight * kl_div(mu, logvar)
             loss.backward()
             optimizer.step()
 
