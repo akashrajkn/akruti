@@ -55,8 +55,7 @@ class TagEmbedding(nn.Module):
         self.emb_dim   = emb_dim
         self.device    = device
 
-        # TODO: init this matrix
-        self.embedding = nn.Parameter(torch.FloatTensor(input_dim, emb_dim))
+        self.embedding = nn.Parameter(torch.rand(input_dim, emb_dim))
 
     def forward(self, src):
         src      = src.permute(1, 0)
@@ -165,7 +164,7 @@ class MSVED(nn.Module):
         return mu + eps * std
 
     def forward(self, x_s, y_t=None):
-        # Semi sup
+        # Semi supervised
         if y_t is None:
             pass
 
@@ -176,12 +175,10 @@ class MSVED(nn.Module):
 
         z              = self.reparameterize(mu_u, logvar_u)
         tag_embeds     = self.tag_embedding(y_t)
-
         outputs        = torch.zeros(self.max_len, batch_size, trg_vocab_size).to(self.device)
-        # h              = torch.zeros(1, self.decoder.dec_hid_dim)
 
         for t in range(1, self.max_len):
-            o, h       = self.decoder(h, tag_embeds, mu_u)  # TODO: replace with z_mu
+            o, h       = self.decoder(h, tag_embeds, mu_u)
             outputs[t] = o
 
         return outputs, mu_u, logvar_u

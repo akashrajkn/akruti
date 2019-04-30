@@ -12,7 +12,7 @@ from timeit import default_timer as timer
 from datetime import timedelta
 
 from models import WordEncoder, Attention, TagEmbedding, WordDecoder, MSVED
-from helper import load_file, get_label_length
+from helper import load_file
 from dataset import MorphologyDatasetTask3
 
 
@@ -35,6 +35,7 @@ def test(model, test_dataloader, config, idx_2_char, guesses_file):
     device = config['device']
     output = ''
 
+    model.eval()
     for i_batch, sample_batched in enumerate(test_dataloader):
 
         with torch.no_grad():
@@ -55,7 +56,7 @@ def test(model, test_dataloader, config, idx_2_char, guesses_file):
                 p      = np.argmax(i, axis=0).detach().cpu().item()
                 entity = idx_2_char[p]
 
-                if entity == '<SOS>':
+                if   entity == '<SOS>':
                     continue
                 elif entity == '<PAD>' or entity == '<EOS>':
                     break
@@ -82,6 +83,9 @@ def train(train_dataloader, config, model_file):
     loss_function = nn.CrossEntropyLoss()
     optimizer     = optim.SGD(model.parameters(), lr=0.1)
 
+    kl_weight     = config['kl_start']
+    anneal_rate   = (1.0 - config['kl_start']) / (config['epochs'] * len(train_dataloader))
+
     print('-' * 13)
     print('    DEVICE')
     print('-' * 13)
@@ -99,7 +103,6 @@ def train(train_dataloader, config, model_file):
 
         start      = timer()
         epoch_loss = 0
-        count      = 0
 
         for i_batch, sample_batched in enumerate(train_dataloader):
             optimizer.zero_grad()
@@ -117,17 +120,16 @@ def train(train_dataloader, config, model_file):
             x_t_p = x_t_p[1:].view(-1, x_t_p.shape[-1])
             x_t   = x_t[1:].contiguous().view(-1)
 
-            loss = loss_function(x_t_p, x_t) + config['lambda_m'] * kl_div(mu, logvar)
+            loss  = loss_function(x_t_p, x_t) - kl_weight * kl_div(mu, logvar)
             loss.backward()
             optimizer.step()
 
-            current_loss = loss.detach().cpu().item()
-            epoch_loss  += current_loss
-            count       += 1
+            kl_weight    = min(config['lambda_m'], kl_weight + anneal_rate)
+            epoch_loss  += loss.detach().cpu().item()
 
         end = timer()
 
-        print('Epoch: {}, Loss: {}'.format(epoch, epoch_loss / count))
+        print('Epoch: {}, Loss: {}'.format(epoch, epoch_loss / i_batch))
         print('         - Time: {}'.format(timedelta(seconds=end - start)))
 
         print('         - Save model')
@@ -145,25 +147,29 @@ if __name__ == "__main__":
     msd_types  = load_file('../data/pickles/msd_options')  # label types
 
     parser     = argparse.ArgumentParser()
-    parser.add_argument('--train', action='store_true')
-    parser.add_argument('--test',  action='store_true')
-    parser.add_argument("-epochs", action="store", type=int, default=50)
-    args       = parser.parse_args()
+    parser.add_argument('--train',     action='store_true')
+    parser.add_argument('--test',      action='store_true')
+    parser.add_argument('-epochs',     action="store", type=int,   default=50)
+    parser.add_argument('-h_dim',      action="store", type=int,   default=256)
+    parser.add_argument('-z_dim',      action="store", type=int,   default=150)
+    parser.add_argument('-batch_size', action="store", type=int,   default=64)
+    parser.add_argument('-kl_start',   action="store", type=float, default=0.0)
+    parser.add_argument('-lambda_m',   action="store", type=float, default=0.2)
 
+    args       = parser.parse_args()
     run_train  = args.train
     run_test   = args.test
 
     config                  = {}
     config['epochs']        = args.epochs
-    config['h_dim']         = 256
-    config['z_dim']         = 150
-    config['lambda_m']      = 0.2  # TODO: linear/exp anneal term
-    config['bidirectional'] = True
-    config['batch_size']    = 256
+    config['kl_start']      = args.kl_start
+    config['h_dim']         = args.h_dim
+    config['z_dim']         = args.z_dim
+    config['lambda_m']      = args.lambda_m
+    config['batch_size']    = args.batch_size
+    config['language']      = 'turkish'
     config['device']        = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     config['vocab_size']    = len(char_2_idx)
-    config['language']      = 'turkish'
-    # config['label_len']     = get_label_length(idx_2_desc, msd_types)
 
     # Get train_dataloader
     train_file       = '{}-task3-train'.format(config['language'])
