@@ -79,7 +79,8 @@ def train(train_dataloader, config, model_file):
     tag_embedding = TagEmbedding(config['label_len'], device=device)
     attention     = Attention()
     decoder       = WordDecoder(attention, config['vocab_size'])
-    model         = MSVED(encoder, tag_embedding, decoder, config['max_seq_len'], device).to(device)
+    model         = MSVED(encoder, tag_embedding, decoder, config['max_seq_len'],
+                          config['batch_size'], config['vocab_size'], device).to(device)
     loss_function = nn.CrossEntropyLoss()
     optimizer     = optim.SGD(model.parameters(), lr=0.1)
 
@@ -115,7 +116,7 @@ def train(train_dataloader, config, model_file):
             y_t = torch.transpose(y_t, 0, 1)
             x_t = torch.transpose(x_t, 0, 1)
 
-            x_t_p, mu, logvar = model(x_s, y_t)
+            x_t_p, mu, logvar = model(x_s, x_t, y_t)
 
             x_t_p = x_t_p[1:].view(-1, x_t_p.shape[-1])
             x_t   = x_t[1:].contiguous().view(-1)
@@ -126,6 +127,7 @@ def train(train_dataloader, config, model_file):
 
             kl_weight    = min(config['lambda_m'], kl_weight + anneal_rate)
             epoch_loss  += loss.detach().cpu().item()
+            # break
 
         end = timer()
 
