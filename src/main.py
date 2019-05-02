@@ -235,7 +235,7 @@ def train(config):
                                                            bce_loss.detach().cpu().item(),
                                                            kl_term.detach().cpu().item(),
                                                            kl_weight,
-                                                           epoch_loss)
+                                                           loss.detach().cpu().item())
             kl_weight    = min(config['lambda_m'], kl_weight + anneal_rate)
 
         end = timer()
