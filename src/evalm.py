@@ -35,13 +35,13 @@ def distance(str1, str2):
 
 def evaluate(gold, guess):
     " Evaluates a single tag "
-    
+
     # best guess
     best = guess[0]
     # compute the metrics
     acc = 1.0 if best == gold else 0
     # edit distance
-    lev = distance(best, gold)    
+    lev = distance(best, gold)
     # reciprocal rank
     rank = 0.0
 
@@ -50,26 +50,26 @@ def evaluate(gold, guess):
     except ValueError:
         # 1.0 / oo = 0
         rank = 0.0
-    
+
     return float(acc), float(lev), float(rank)
 
 
 def aggregate(golden, guesses):
     """ Aggregates over the results """
-    
+
     breakdown = dd(lambda : (0.0, 0.0, 0.0, 0.0))
     breakdown_N = dd(int)
     N = 0
     A, L, NL, R = 0.0, 0.0, 0.0, 0.0
     for tag, gold in golden.items():
-        
+
         if tag in guesses:
             guess = guesses[tag]
             # assumes only 1 golden analysis
             if len(gold) > 1:
                 for elem in gold[1:]:
                     assert elem == gold[0]
-                    
+
             acc, lev, rank = evaluate(gold[0], guess)
             A, L, NL, R = A+acc, L+lev, NL+(lev / len(gold[0])), R+rank
             # compute results broken down by POS tag
@@ -77,7 +77,7 @@ def aggregate(golden, guesses):
             _A, _L, _NL, _R = breakdown[pos]
             breakdown[pos] = _A+acc, _L+lev, _NL+(lev / len(gold[0])), _R+rank
             breakdown_N[pos] += 1
-            
+
         else:
             sys.stderr.write("warning: no guess provided for (%s)\n" % " ".join(tag))
         N += 1
@@ -87,7 +87,7 @@ def aggregate(golden, guesses):
 
 def read_file(file_in):
     """ Read in the users' guesses """
-    
+
     with codecs.open(file_in, 'rb', encoding="utf-8") as f:
         guesses = dd(list)
         lemma, tag = None, None
@@ -99,13 +99,13 @@ def read_file(file_in):
             guesses[guess_id].append(guess)
 
     return dict(guesses)
-            
+
 
 def pp(A, L, NL, R):
-    print("Accuracy:", A)
-    print("Mean Levenshtein:", L)
-    print("Mean Normalized Levenshtein:", NL)
-    print("Mean Reciprocal Rank:", R)
+    print("Accuracy                    :", A)
+    print("Mean Levenshtein            :", L)
+    print("Mean Normalized Levenshtein :", NL)
+    print("Mean Reciprocal Rank        :", R)
 
 if __name__ == "__main__":
 
@@ -113,14 +113,19 @@ if __name__ == "__main__":
     parser.add_argument("--golden")
     parser.add_argument("--guesses")
     args = parser.parse_args()
-    
-    golden = read_file(args.golden)
+
+    golden  = read_file(args.golden)
     guesses = read_file(args.guesses)
     A, L, NL, R, breakdown, breakdown_N = aggregate(golden, guesses)
+
     for tag, (_A, _L, _NL, _R) in breakdown.items():
+        print('-' * 50)
         print(tag)
+
         _N = breakdown_N[tag]
         pp(_A / _N, _L / _N, _NL / _N, _R / _N)
-        print
+
+    print('-' * 50)
     print("Aggregate")
     pp(A, L, NL, R)
+    print('-' * 50)
