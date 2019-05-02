@@ -34,9 +34,10 @@ class WordEncoder(nn.Module):
         # embedded         = self.dropout(self.embedding(src))
         embedded         = self.embedding(src)
 
-        print("--")
+        # print("--")
+        # print(src.is_cuda)
         # print(src.size())
-        print(embedded.size())
+        # print(embedded.size())
         _, hidden        = self.rnn(embedded)
         hidden           = torch.cat((hidden[-2,:,:], hidden[-1,:,:]), dim = 1)
 
@@ -114,7 +115,7 @@ class Attention(nn.Module):
 
 
 class WordDecoder(nn.Module):
-    def __init__(self, attention, output_dim, emb_dim=300, z_dim=150, tag_embed_dim=200, dec_hid_dim=512, dropout=0.4):
+    def __init__(self, attention, output_dim, emb_dim=300, z_dim=150, tag_embed_dim=200, dec_hid_dim=512, dropout=0.4, device=None):
         super(WordDecoder, self).__init__()
 
         self.z_dim         = z_dim
@@ -123,9 +124,10 @@ class WordDecoder(nn.Module):
         self.dec_hid_dim   = dec_hid_dim
         self.output_dim    = output_dim  # vocab size
         self.attention     = attention
+        self.device        = device
 
         self.embedding = nn.Embedding(output_dim, emb_dim)
-        self.rnn       = nn.GRU(tag_embed_dim + z_dim, dec_hid_dim)
+        self.rnn       = nn.GRU(emb_dim + tag_embed_dim + z_dim, dec_hid_dim)
         self.out       = nn.Linear(tag_embed_dim + dec_hid_dim, output_dim)
         self.dropout   = nn.Dropout(dropout)
 
@@ -136,10 +138,11 @@ class WordDecoder(nn.Module):
         tag_embeds -- tag embeddings
         z          -- lemma represented by the latent variable
         '''
-        input    = input.type(torch.LongTensor)
-        embedded = self.dropout(self.embedding(input))
+        input = input.type(torch.LongTensor).to(self.device)
+        input = input.unsqueeze(0)
 
-        print(embedded.size())
+        # embedded = self.dropout(self.embedding(input))
+        embedded = self.embedding(input)
 
         a = self.attention(hidden, tag_embeds)
         a = a.unsqueeze(1)
@@ -149,19 +152,26 @@ class WordDecoder(nn.Module):
         # print(z.size())
         # print(tag_embeds.size())
 
-
         weighted       = torch.bmm(a, tag_embeds)
         weighted       = weighted.permute(1, 0, 2)
 
-        rnn_input      = torch.cat((weighted, z), dim=2)
+        rnn_input      = torch.cat((embedded, weighted, z), dim=2)
         output, hidden = self.rnn(rnn_input, hidden.unsqueeze(0))
 
         # TODO: Find out why this is required
         # assert (output == hidden).all()
 
+
+
         output   = output.squeeze(0)
         weighted = weighted.squeeze(0)
         output   = self.out(torch.cat((output, weighted), dim=1))
+
+        # print("---")
+        # print(output.size())
+        # print(embedded.size())
+        # print(weighted.size())
+        # print(z.size())
 
         return output, hidden.squeeze(0)
 
@@ -198,12 +208,11 @@ class MSVED(nn.Module):
         tag_embeds     = self.tag_embedding(y_t)
         # z              = self.reparameterize(mu_u, var_u)
 
-        o              = x_t[:, 0]  # Start token
-
-        print(o.size())
+        o              = x_t[0, :]  # Start tokens
 
         for t in range(1, self.max_len):
             o, h       = self.decoder(o, h, tag_embeds, mu_u)
             outputs[t] = o
+            o          = o.max(1)[1]
 
         return outputs, mu_u, var_u

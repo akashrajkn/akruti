@@ -40,12 +40,14 @@ def test(model, test_dataloader, config, idx_2_char, guesses_file):
 
         with torch.no_grad():
             x_s = sample_batched['source_form'].to(device)
+            x_t = sample_batched['target_form'].to(device)
             y_t = sample_batched['msd'].to(device)
 
             x_s = torch.transpose(x_s, 0, 1)
+            x_t = torch.transpose(x_t, 0, 1)
             y_t = torch.transpose(y_t, 0, 1)
 
-            x_t_p, _, _ = model(x_s, y_t)
+            x_t_p, _, _ = model(x_s, x_t, y_t)
             x_t_p       = x_t_p[1:].view(-1, x_t_p.shape[-1])
 
             outputs     = F.log_softmax(x_t_p, dim=1).type(torch.LongTensor)
@@ -78,7 +80,7 @@ def train(train_dataloader, config, model_file):
     encoder       = WordEncoder(config['vocab_size'], device=device)  # TODO: give padding_idx
     tag_embedding = TagEmbedding(config['label_len'], device=device)
     attention     = Attention()
-    decoder       = WordDecoder(attention, config['vocab_size'])
+    decoder       = WordDecoder(attention, config['vocab_size'], device=device)
     model         = MSVED(encoder, tag_embedding, decoder, config['max_seq_len'],
                           config['batch_size'], config['vocab_size'], device).to(device)
     loss_function = nn.CrossEntropyLoss()
@@ -133,7 +135,7 @@ def train(train_dataloader, config, model_file):
 
         print('Epoch: {}, Loss: {}'.format(epoch, epoch_loss / i_batch))
         print('         - Time: {}'.format(timedelta(seconds=end - start)))
-
+        # break
         print('         - Save model')
         torch.save(model, '../models/model-{}-epochs_{}.pt'.format(model_file, str(config['epochs'])))
 
