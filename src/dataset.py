@@ -67,6 +67,10 @@ class MorphologyDatasetTask3(Dataset):
         self.padding_idx = char_2_idx['<PAD>']
         self.label_len   = get_label_length(idx_2_desc, msd_types) + 1  # last index is for None
 
+
+    def get_vocab_size(self):
+        return len(self.char_2_idx)
+
     def _max_sequence_length(self):
         '''
         Return the length of the longest source/target sequence

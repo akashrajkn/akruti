@@ -9,29 +9,29 @@ import torch.nn.functional as F
 
 
 class WordEncoder(nn.Module):
-    def __init__(self, input_dim, emb_dim=300, enc_hid_dim=256, dec_hid_dim=150, dropout=0.4, device=None):
+    def __init__(self, input_dim, emb_dim=300, enc_h_dim=256, z_dim=150,
+                 dropout=0.4, padding_idx=None, device=None):
         '''
         input_dim   -- vocabulary(characters) size
         emb_dim     -- character embedding dimension
-        enc_hid_dim -- RNN hidden state dimenion
-        dec_hid_dim -- latent variable z dimension
+        enc_h_dim -- RNN hidden state dimenion
+        z_dim       -- latent variable z dimension
         '''
         super(WordEncoder, self).__init__()
 
         self.input_dim   = input_dim
         self.emb_dim     = emb_dim
-        self.enc_hid_dim = enc_hid_dim
-        self.dec_hid_dim = dec_hid_dim
+        self.enc_h_dim = enc_h_dim
+        self.z_dim       = z_dim
         self.device      = device
 
         self.embedding   = nn.Embedding(input_dim, emb_dim)
-        self.rnn         = nn.GRU(emb_dim, enc_hid_dim, bidirectional = True)
-        self.fc_mu       = nn.Linear(enc_hid_dim * 2, dec_hid_dim)
-        self.fc_sigma    = nn.Linear(enc_hid_dim * 2, dec_hid_dim)
-        self.dropout     = nn.Dropout(dropout)
+        self.rnn         = nn.GRU(emb_dim, enc_h_dim, bidirectional = True)
+        self.fc_mu       = nn.Linear(enc_h_dim * 2, z_dim)
+        self.fc_sigma    = nn.Linear(enc_h_dim * 2, z_dim)
+        self.dropout     = nn.Dropout(dropout)  # NOTE: This is not being used
 
     def forward(self, src):
-        # embedded         = self.dropout(self.embedding(src))
         embedded         = self.embedding(src)
         _, hidden        = self.rnn(embedded)
         hidden           = torch.cat((hidden[-2,:,:], hidden[-1,:,:]), dim = 1)
@@ -58,9 +58,9 @@ class TagEmbedding(nn.Module):
         self.embedding = nn.Parameter(torch.rand(input_dim, emb_dim))
 
     def forward(self, src):
-        src      = src.permute(1, 0, 2)
-        embedded = torch.stack([torch.mm(batch.float(), self.embedding)
-                                for batch in src], dim=0)
+        src            = src.permute(1, 0, 2)
+        embedded       = torch.stack([torch.mm(batch.float(), self.embedding)
+                                      for batch in src], dim=0)
 
         return embedded
 
@@ -69,18 +69,18 @@ class Attention(nn.Module):
     '''
     Attention over tag embeddings
     '''
-    def __init__(self, tag_embed_dim=200, dec_hid_dim=512):
+    def __init__(self, emb_dim=200, dec_h_dim=512):
         '''
-        tag_embed_dim -- tag embedding dimension
-        dec_hid_dim   -- decoder hidden state dimension
+        emb_dim   -- tag embedding dimension
+        dec_h_dim -- decoder hidden state dimension
         '''
         super(Attention, self).__init__()
 
-        self.tag_embed_dim = tag_embed_dim
-        self.dec_hid_dim   = dec_hid_dim
+        self.emb_dim   = emb_dim
+        self.dec_h_dim = dec_h_dim
 
-        self.attn  = nn.Linear(dec_hid_dim + tag_embed_dim, dec_hid_dim)
-        self.v     = nn.Parameter(torch.rand(dec_hid_dim))
+        self.attn      = nn.Linear(dec_h_dim + emb_dim, dec_h_dim)
+        self.v         = nn.Parameter(torch.rand(dec_h_dim))
 
     def forward(self, hidden, tag_embeds):
         '''
@@ -101,21 +101,25 @@ class Attention(nn.Module):
 
 
 class WordDecoder(nn.Module):
-    def __init__(self, attention, output_dim, emb_dim=300, z_dim=150, tag_embed_dim=200, dec_hid_dim=512, dropout=0.4, device=None):
+    def __init__(self, attention, output_dim, char_emb_dim=300, z_dim=150, tag_emb_dim=200,
+                 dec_h_dim=512, dropout=0.4, padding_idx=None, device=None):
+        '''
+        output_dim -- vocabulary size
+        '''
         super(WordDecoder, self).__init__()
 
-        self.z_dim         = z_dim
-        self.emb_dim       = emb_dim
-        self.tag_embed_dim = tag_embed_dim
-        self.dec_hid_dim   = dec_hid_dim
-        self.output_dim    = output_dim  # vocab size
-        self.attention     = attention
-        self.device        = device
+        self.z_dim        = z_dim
+        self.char_emb_dim = char_emb_dim
+        self.tag_emb_dim  = tag_emb_dim
+        self.dec_h_dim    = dec_h_dim
+        self.output_dim   = output_dim
+        self.attention    = attention
+        self.device       = device
 
-        self.embedding = nn.Embedding(output_dim, emb_dim)
-        self.rnn       = nn.GRU(emb_dim + tag_embed_dim + z_dim, dec_hid_dim)
-        self.out       = nn.Linear(tag_embed_dim + dec_hid_dim, output_dim)
-        self.dropout   = nn.Dropout(dropout)
+        self.embedding    = nn.Embedding(output_dim, char_emb_dim)
+        self.rnn          = nn.GRU(char_emb_dim + tag_emb_dim + z_dim, dec_h_dim)
+        self.out          = nn.Linear(tag_emb_dim + dec_h_dim, output_dim)
+        self.dropout      = nn.Dropout(dropout)
 
     def forward(self, input, hidden, tag_embeds, z):
         '''
@@ -124,11 +128,9 @@ class WordDecoder(nn.Module):
         tag_embeds -- tag embeddings
         z          -- lemma represented by the latent variable
         '''
-        input = input.type(torch.LongTensor).to(self.device)
-        input = input.unsqueeze(0)
-
-        # embedded = self.dropout(self.embedding(input))
-        embedded = self.embedding(input)
+        input    = input.type(torch.LongTensor).to(self.device)
+        input    = input.unsqueeze(0)
+        embedded = self.dropout(self.embedding(input))
 
         a = self.attention(hidden, tag_embeds)
         a = a.unsqueeze(1)

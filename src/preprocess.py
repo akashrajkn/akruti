@@ -1,3 +1,4 @@
+import argparse
 import os
 import pickle
 import sys
@@ -5,7 +6,7 @@ import sys
 from helper import *
 
 
-def convert_to_dicts(all_out):
+def convert_to_dicts(all_out, language):
     '''
     (Task 3)
     Find vocabulary, generate dictionary and save files
@@ -73,34 +74,34 @@ def convert_to_dicts(all_out):
 
     print('Saving (Vocab) dictionaries')
 
-    save_file('../data/pickles/idx_2_char',  idx_2_char)
-    save_file('../data/pickles/char_2_idx',  char_2_idx)
-    save_file('../data/pickles/idx_2_desc',  idx_2_desc)
-    save_file('../data/pickles/desc_2_idx',  desc_2_idx)
-    save_file('../data/pickles/msd_options', msd_options)
+    save_file('../data/pickles/{}-idx_2_char'.format(language),  idx_2_char)
+    save_file('../data/pickles/{}-char_2_idx'.format(language),  char_2_idx)
+    save_file('../data/pickles/{}-idx_2_desc'.format(language),  idx_2_desc)
+    save_file('../data/pickles/{}-desc_2_idx'.format(language),  desc_2_idx)
+    save_file('../data/pickles/{}-msd_options'.format(language), msd_options)
 
     print('  - Done')
 
 
-def main(filepath, rewrite=False):
+def main(language, rewrite=False):
 
-    all_out = read_task_3(filepath)
+    datapath = '../data/files/{}-task3-train.csv'.format(language)
+    all_out  = read_task_3(datapath)
 
-    if (not os.path.exists('../data/pickles/idx_2_char')) or rewrite:
-        convert_to_dicts(all_out)
+    if (not os.path.exists('../data/pickles/{}-idx_2_char'.format(language))) or rewrite:
+        convert_to_dicts(all_out, language)
     else:
         print('Dictionaries already exist. Re-run')
 
 
 if __name__ == '__main__':
-    datapath = '../data/files/turkish-task3-train.csv'
-    # datapath = '../data/files/english_csv_test.csv'
 
-    rewrite = False
+    parser   = argparse.ArgumentParser()
+    parser.add_argument('--rewrite', action='store_true')
+    parser.add_argument('-language', action="store", type=str)
 
-    if len(sys.argv) <= 1:
-        rewrite = False
-    elif sys.argv[1] == 'rewrite':
-        rewrite = True
+    args     = parser.parse_args()
+    rewrite  = args.rewrite
+    language = args.language
 
-    main(datapath, rewrite=rewrite)
+    main(language=language, rewrite=rewrite)
