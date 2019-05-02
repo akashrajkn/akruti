@@ -82,7 +82,7 @@ def train(train_dataloader, config, model_file):
     attention     = Attention()
     decoder       = WordDecoder(attention, config['vocab_size'], device=device)
     model         = MSVED(encoder, tag_embedding, decoder, config['max_seq_len'],
-                          config['batch_size'], config['vocab_size'], device).to(device)
+                          config['vocab_size'], device).to(device)
     loss_function = nn.CrossEntropyLoss()
     optimizer     = optim.SGD(model.parameters(), lr=0.1)
 
@@ -129,13 +129,12 @@ def train(train_dataloader, config, model_file):
 
             kl_weight    = min(config['lambda_m'], kl_weight + anneal_rate)
             epoch_loss  += loss.detach().cpu().item()
-            # break
 
         end = timer()
 
         print('Epoch: {}, Loss: {}'.format(epoch, epoch_loss / i_batch))
         print('         - Time: {}'.format(timedelta(seconds=end - start)))
-        # break
+
         print('         - Save model')
         torch.save(model, '../models/model-{}-epochs_{}.pt'.format(model_file, str(config['epochs'])))
 

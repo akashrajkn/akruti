@@ -33,11 +33,6 @@ class WordEncoder(nn.Module):
     def forward(self, src):
         # embedded         = self.dropout(self.embedding(src))
         embedded         = self.embedding(src)
-
-        # print("--")
-        # print(src.is_cuda)
-        # print(src.size())
-        # print(embedded.size())
         _, hidden        = self.rnn(embedded)
         hidden           = torch.cat((hidden[-2,:,:], hidden[-1,:,:]), dim = 1)
 
@@ -95,21 +90,12 @@ class Attention(nn.Module):
         batch_size = tag_embeds.shape[0]
         src_len    = tag_embeds.shape[1]  # Should be seq_len: 11 in the case of Turkish
 
-        # print('Hidden size:    {}'.format(str(hidden.size())))
-
         hidden     = hidden.unsqueeze(1).repeat(1, src_len, 1)
         energy     = torch.tanh(self.attn(torch.cat((hidden, tag_embeds), dim=2)))
         energy     = energy.permute(0, 2, 1)
 
         v          = self.v.repeat(batch_size, 1).unsqueeze(1)
         attention  = torch.bmm(v, energy).squeeze(1)
-
-        # print('Hidden size:    {}'.format(str(hidden.size())))
-        # print('Tag Embed size: {}'.format(str(tag_embeds.size())))
-        # print('v size:         {}'.format(str(v.size())))
-        # print('self.v size:    {}'.format(str(self.v.size())))
-        # print('energy size:    {}'.format(str(energy.size())))
-        # print('attention size: {}'.format(str(attention.size())))
 
         return F.softmax(attention, dim=1)
 
@@ -148,10 +134,6 @@ class WordDecoder(nn.Module):
         a = a.unsqueeze(1)
         z = z.unsqueeze(0)  # For tensor dimension compatibility - see rnn_input
 
-        # print(a.size())
-        # print(z.size())
-        # print(tag_embeds.size())
-
         weighted       = torch.bmm(a, tag_embeds)
         weighted       = weighted.permute(1, 0, 2)
 
@@ -161,17 +143,9 @@ class WordDecoder(nn.Module):
         # TODO: Find out why this is required
         # assert (output == hidden).all()
 
-
-
         output   = output.squeeze(0)
         weighted = weighted.squeeze(0)
         output   = self.out(torch.cat((output, weighted), dim=1))
-
-        # print("---")
-        # print(output.size())
-        # print(embedded.size())
-        # print(weighted.size())
-        # print(z.size())
 
         return output, hidden.squeeze(0)
 
@@ -180,7 +154,7 @@ class MSVED(nn.Module):
     '''
     Multi-space Variational Encoder-Decoder
     '''
-    def __init__(self, encoder, tag_embedding, decoder, max_len, batch_size, vocab_size, device):
+    def __init__(self, encoder, tag_embedding, decoder, max_len, vocab_size, device):
         super(MSVED, self).__init__()
 
         self.encoder       = encoder
@@ -189,7 +163,6 @@ class MSVED(nn.Module):
 
         self.max_len       = max_len
         self.device        = device
-        self.batch_size    = batch_size
         self.vocab_size    = vocab_size
 
     def reparameterize(self, mu, logvar):
@@ -203,11 +176,12 @@ class MSVED(nn.Module):
         if y_t is None:
             pass
 
-        outputs        = torch.zeros(self.max_len, self.batch_size, self.vocab_size).to(self.device)
+        batch_size     = x_s.shape[1]
+        outputs        = torch.zeros(self.max_len, batch_size, self.vocab_size).to(self.device)
+
         h, mu_u, var_u = self.encoder(x_s)
         tag_embeds     = self.tag_embedding(y_t)
         # z              = self.reparameterize(mu_u, var_u)
-
         o              = x_t[0, :]  # Start tokens
 
         for t in range(1, self.max_len):
