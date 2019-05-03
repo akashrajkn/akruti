@@ -17,7 +17,7 @@ from collections import defaultdict as dd
 
 
 def distance(str1, str2):
-    """Simple Levenshtein implementation for evalm."""
+    '''Simple Levenshtein implementation for evalm.'''
     m = np.zeros([len(str2)+1, len(str1)+1])
     for x in range(1, len(str2) + 1):
         m[x][0] = m[x-1][0] + 1
@@ -34,7 +34,7 @@ def distance(str1, str2):
 
 
 def evaluate(gold, guess):
-    " Evaluates a single tag "
+    '''Evaluates a single tag'''
 
     # best guess
     best = guess[0]
@@ -55,7 +55,7 @@ def evaluate(gold, guess):
 
 
 def aggregate(golden, guesses):
-    """ Aggregates over the results """
+    ''' Aggregates over the results '''
 
     breakdown = dd(lambda : (0.0, 0.0, 0.0, 0.0))
     breakdown_N = dd(int)
@@ -70,32 +70,35 @@ def aggregate(golden, guesses):
                 for elem in gold[1:]:
                     assert elem == gold[0]
 
-            acc, lev, rank = evaluate(gold[0], guess)
-            A, L, NL, R = A+acc, L+lev, NL+(lev / len(gold[0])), R+rank
-            # compute results broken down by POS tag
-            pos = tag[-1].split(",")[0].replace("pos=", "")
-            _A, _L, _NL, _R = breakdown[pos]
-            breakdown[pos] = _A+acc, _L+lev, _NL+(lev / len(gold[0])), _R+rank
-            breakdown_N[pos] += 1
+            acc, lev, rank    = evaluate(gold[0], guess)
+            A, L, NL, R       = A + acc, L + lev, NL + (lev / len(gold[0])), R + rank
 
+            # compute results broken down by POS tag
+            pos               = tag[-1].split(",")[0].replace("pos=", "")
+            _A, _L, _NL, _R   = breakdown[pos]
+            breakdown[pos]    = _A + acc, _L + lev, _NL + (lev / len(gold[0])), _R + rank
+            breakdown_N[pos] += 1
         else:
             sys.stderr.write("warning: no guess provided for (%s)\n" % " ".join(tag))
+
         N += 1
 
-    return A/N, L/N, NL/N, R/N, breakdown, breakdown_N
+    return A / N, L / N, NL / N, R / N, breakdown, breakdown_N
 
 
 def read_file(file_in):
-    """ Read in the users' guesses """
+    ''' Read in the users' guesses '''
 
     with codecs.open(file_in, 'rb', encoding="utf-8") as f:
-        guesses = dd(list)
+        guesses    = dd(list)
         lemma, tag = None, None
+
         for line in f:
-            line = line.strip()
-            l = line.split()
+            line     = line.strip()
+            l        = line.split()
+
             guess_id = tuple(l[:-1])
-            guess = l[-1]
+            guess    = l[-1]
             guesses[guess_id].append(guess)
 
     return dict(guesses)
@@ -107,15 +110,17 @@ def pp(A, L, NL, R):
     print("Mean Normalized Levenshtein :", NL)
     print("Mean Reciprocal Rank        :", R)
 
+
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser(description='SIGMORPHON 2016 Shared Task Evaluation')
-    parser.add_argument("--golden")
-    parser.add_argument("--guesses")
-    args = parser.parse_args()
+    parser  = argparse.ArgumentParser(description='SIGMORPHON 2016 Shared Task Evaluation')
+    parser.add_argument('-language', action="store", type=str)
+    parser.add_argument('-model_id', action="store", type=int)
+    args    = parser.parse_args()
 
-    golden  = read_file(args.golden)
-    guesses = read_file(args.guesses)
+    golden  = read_file('../data/files/{}-task3-test'.format(args.language))
+    guesses = read_file('../results/{}-{}-guesses'.format(args.language, args.model_id))
+
     A, L, NL, R, breakdown, breakdown_N = aggregate(golden, guesses)
 
     for tag, (_A, _L, _NL, _R) in breakdown.items():

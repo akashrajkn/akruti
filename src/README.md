@@ -8,19 +8,9 @@ conda activate akruti
 python preprocess.py -language=turkish --rewrite
 ```
 
-### Run
-
-#### Train
+### Train, Test, Evaluation
 ```
-python main.py --train -model_id=1 -language=turkish -epochs=5
-```
-
-#### Test
-```
-python main.py --test -model_id=1 -language=turkish
-```
-
-### Evaluation
-```
-python evalm.py --golden=../data/files/turkish-task3-test --guesses=../results/turkish-1-guesses
+python main.py  --train -model_id=1 -language=turkish -epochs=5
+python main.py  --test  -model_id=1 -language=turkish
+python evalm.py         -model_id=1 -language=turkish
 ```
