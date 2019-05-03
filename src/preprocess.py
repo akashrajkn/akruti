@@ -85,7 +85,7 @@ def convert_to_dicts(all_out, language):
 
 def main(language, rewrite=False):
 
-    datapath = '../data/files/{}-task3-train.csv'.format(language)
+    datapath = '../data/files/{}-task3-train'.format(language)
     all_out  = read_task_3(datapath)
 
     if (not os.path.exists('../data/pickles/{}-idx_2_char'.format(language))) or rewrite:

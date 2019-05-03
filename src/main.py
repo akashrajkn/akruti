@@ -1,4 +1,5 @@
 import os
+import pickle
 import logging
 import argparse
 
@@ -77,8 +78,8 @@ def initialize_dataloader(run_type, language, batch_size, shuffle):
     msd_types  = load_file('../data/pickles/{}-msd_options'.format(language))  # label types
 
     file_name  = '{}-task3-{}'.format(language, run_type)
-    morph_data = MorphologyDatasetTask3(csv_file='../data/files/{}.csv'.format(file_name),
-                                                   language=language, get_unprocessed=(run_type == 'test'))
+    morph_data = MorphologyDatasetTask3(csv_file='../data/files/{}'.format(file_name),
+                                        language=language, get_unprocessed=(run_type == 'test'))
 
     morph_data.set_vocabulary(char_2_idx, idx_2_char, desc_2_idx, idx_2_desc, msd_types)
     dataloader = DataLoader(morph_data, batch_size=batch_size, shuffle=shuffle, num_workers=2)
