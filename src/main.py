@@ -94,7 +94,7 @@ def kl_div(mu, logvar):
     return - 0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
 
 
-def test(language, model_id):
+def test(language, model_id, dont_save):
     '''
     Test function
     '''
@@ -112,7 +112,7 @@ def test(language, model_id):
         device     = torch.device(config['device'])
 
     test_loader, d = initialize_dataloader(run_type='test', language=config['language'],
-                                            batch_size=1, shuffle=False)
+                                           batch_size=1, shuffle=False)
     idx_2_char     = d.idx_2_char
 
     model          = initialize_model(config)
@@ -150,11 +150,14 @@ def test(language, model_id):
 
             output += '{}\t{}\t{}\n'.format(sample_batched['source_str'][0], sample_batched['msd_str'][0], target_word)
 
+    if dont_save:
+        return
+
     with open('../results/{}-{}-guesses'.format(config['language'], model_id), 'w+', encoding="utf-8") as f:
         f.write(output)
 
 
-def train(config):
+def train(config, dont_save):
     '''
     Train function
     '''
@@ -194,11 +197,12 @@ def train(config):
     print('    TRAIN')
     print('-' * 13)
 
-    try:
-        os.mkdir('../models/{}-{}'.format(config['language'], config['model_id']))
-    except OSError:
-        print("Directory already exists")
-        return
+    if not dont_save:
+        try:
+            os.mkdir('../models/{}-{}'.format(config['language'], config['model_id']))
+        except OSError:
+            print("Directory already exists")
+            return
 
     epoch_details = 'epoch, bce_loss, kl_div, kl_weight, loss\n'
 
@@ -227,14 +231,19 @@ def train(config):
             bce_loss = loss_function(x_t_p, x_t)
             kl_term  = kl_div(mu, logvar)
 
-            loss     = bce_loss + kl_weight * kl_term
+            # ha bits , like free bits but over whole layer
+            # REFERENCE: https://github.com/kastnerkyle/pytorch-text-vae
+            habits_lambda = config['lambda_m']
+            clamp_KLD     = torch.clamp(kl_term.mean(), min=habits_lambda).squeeze()
+
+            loss          = bce_loss + kl_weight * clamp_KLD
             loss.backward()
             optimizer.step()
 
             epoch_loss  += loss.detach().cpu().item()
             epoch_details += '{}, {}, {}, {}, {}\n'.format(epoch,
                                                            bce_loss.detach().cpu().item(),
-                                                           kl_term.detach().cpu().item(),
+                                                           clamp_KLD.detach().cpu().item(),
                                                            kl_weight,
                                                            loss.detach().cpu().item())
             kl_weight    = min(config['lambda_m'], kl_weight + anneal_rate)
@@ -243,6 +252,9 @@ def train(config):
 
         print('Epoch: {}, Loss: {}'.format(epoch, epoch_loss / (i_batch + 1)))
         print('         - Time: {}'.format(timedelta(seconds=end - start)))
+
+        if dont_save:
+            continue
 
         torch.save(
             {
@@ -253,6 +265,9 @@ def train(config):
                 'config'              : config
             }, '../models/{}-{}/model.pt'.format(config['language'], config['model_id']))
 
+    if dont_save:
+        return
+
     with open('../models/{}-{}/epoch_details.csv'.format(config['language'], config['model_id']), 'w+') as f:
         f.write(epoch_details)
 
@@ -262,6 +277,7 @@ if __name__ == "__main__":
     parser                  = argparse.ArgumentParser()
     parser.add_argument('--train',       action='store_true')
     parser.add_argument('--test',        action='store_true')
+    parser.add_argument('--dont_save',   action='store_true',        default=False)
     parser.add_argument('-model_id',     action="store", type=int)
     parser.add_argument('-language',     action="store", type=str)
     parser.add_argument('-device',       action="store", type=str,   default='cuda')
@@ -281,6 +297,7 @@ if __name__ == "__main__":
     args                    = parser.parse_args()
     run_train               = args.train
     run_test                = args.test
+    dont_save               = args.dont_save
 
     config                  = {}
     config['model_id']      = args.model_id
@@ -301,8 +318,8 @@ if __name__ == "__main__":
 
     # TRAIN
     if run_train:
-        train(config)
+        train(config, dont_save)
 
     # TEST
     if run_test:
-        test(config['language'], config['model_id'])
+        test(config['language'], config['model_id'], dont_save)

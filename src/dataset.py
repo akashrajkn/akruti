@@ -91,12 +91,19 @@ class MorphologyDatasetTask3(Dataset):
 
     def _prepare_sequence(self, sequence):
         '''
-        Append <EOS> to each sequence and Pad with <PAD>
+        - Append <EOS> to each sequence and Pad with <PAD>
+        - If test set contains characters that didn't occur in the train set,
+            <unk> is used
         '''
         output = [self.char_2_idx['<SOS>']]
 
         for char in sequence:
-            output.append(self.char_2_idx[char])
+            idx = self.char_2_idx.get(char)
+
+            if idx is None:
+                idx = self.char_2_idx['<unk>']
+
+            output.append(idx)
 
         output.append(self.char_2_idx['<EOS>'])
 
@@ -121,10 +128,16 @@ class MorphologyDatasetTask3(Dataset):
             opt   = msd.get(desc)
             types = self.msd_types[i]
 
-            if opt is None:
-                one_hot[self.label_len - 1] = 1
-            else:
+            # if opt is None:
+            #     one_hot[self.label_len - 1] = 1
+            # else:
+            #     one_hot[types[opt]] = 1
+
+            # FIXME: This could be dangerous - check it out again
+            try:
                 one_hot[types[opt]] = 1
+            except:
+                one_hot[self.label_len - 1] = 1
 
             output.append(one_hot)
 

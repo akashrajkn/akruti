@@ -39,6 +39,10 @@ def convert_to_dicts(all_out, language):
     idx_2_char[vocab_size] = '<PAD>'
     vocab_size            += 1
 
+    char_2_idx['<unk>']    = vocab_size
+    idx_2_char[vocab_size] = '<unk>'
+    vocab_size            += 1
+
     for word in all_words:
         for character in word:
             if char_2_idx.get(character) is None:
