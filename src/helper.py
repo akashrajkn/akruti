@@ -97,7 +97,7 @@ def process_MSD(msd):
         out: dict with different msds
     '''
 
-    out = {}
+    out  = {}
     msds = msd.strip().split(',')
 
     for m in msds:
@@ -106,6 +106,13 @@ def process_MSD(msd):
 
     return out
 
+def process_MSD_each_different(msd):
+    '''
+    Considers each different option of an msd type to be a feature
+    '''
+    msds = msd.strip().split(',')
+
+    return msds
 
 def read_task_1(path):
     '''
@@ -160,7 +167,7 @@ def read_task_3(path):
 
         out.append({
             'source_form': line[0],
-            'MSD'        : process_MSD(line[1]),
+            'MSD'        : process_MSD_each_different(line[1]),
             'target_form': line[2]
         })
 

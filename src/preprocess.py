@@ -3,8 +3,62 @@ import os
 import pickle
 import sys
 
-from helper import *
+import helper
 
+
+def get_msd_dict_each_feature(msds):
+    '''
+    Converts msds to dictionary where each msd option is a different feature
+    '''
+    msd_size   = 0
+    desc_2_idx = {}
+    idx_2_desc = {}
+
+
+    for msd in msds:
+        for key in msd:
+            if desc_2_idx.get(key) is None:
+                desc_2_idx[key]      = msd_size
+                idx_2_desc[msd_size] = key
+                msd_size            += 1
+
+    desc_2_idx['<unkMSD>'] = msd_size
+    idx_2_desc[msd_size]   = '<unkMSD>'
+    msd_size              += 1
+
+    return desc_2_idx, idx_2_desc, None
+
+def get_msd_dict_with_types(msds):
+    ''''
+    Converts msds to dictionary
+    '''
+    msd_size   = 0
+    desc_2_idx = {}
+    idx_2_desc = {}
+
+    for obj in msds:
+        for key in obj.keys():
+            if desc_2_idx.get(key) is None:
+                desc_2_idx[key] = msd_size
+                idx_2_desc[msd_size] = key
+                msd_size += 1
+
+    # MSD options dict
+    msd_options = {}
+    count       = 0
+
+    for key, value in desc_2_idx.items():
+        current_options = {}
+        for msd in msds:
+            for k, v in msd.items():
+                if k == key:
+                    if current_options.get(v) is None:
+                        current_options[v] = count
+                        count += 1
+
+        msd_options[value] = current_options
+
+    return desc_2_idx, idx_2_desc, msd_options
 
 def convert_to_dicts(all_out, language):
     '''
@@ -50,39 +104,17 @@ def convert_to_dicts(all_out, language):
                 idx_2_char[vocab_size] = character
                 vocab_size += 1
 
-    msd_size   = 0
-    desc_2_idx = {}
-    idx_2_desc = {}
-
-    for obj in msds:
-        for key in obj.keys():
-            if desc_2_idx.get(key) is None:
-                desc_2_idx[key] = msd_size
-                idx_2_desc[msd_size] = key
-                msd_size += 1
-
-    # MSD options dict
-    msd_options = {}
-    count       = 0
-
-    for key, value in desc_2_idx.items():
-        current_options = {}
-        for msd in msds:
-            for k, v in msd.items():
-                if k == key:
-                    if current_options.get(v) is None:
-                        current_options[v] = count
-                        count += 1
-
-        msd_options[value] = current_options
+    desc_2_idx, idx_2_desc, msd_options = get_msd_dict_each_feature(msds)
 
     print('Saving (Vocab) dictionaries')
 
-    save_file('../data/pickles/{}-idx_2_char'.format(language),  idx_2_char)
-    save_file('../data/pickles/{}-char_2_idx'.format(language),  char_2_idx)
-    save_file('../data/pickles/{}-idx_2_desc'.format(language),  idx_2_desc)
-    save_file('../data/pickles/{}-desc_2_idx'.format(language),  desc_2_idx)
-    save_file('../data/pickles/{}-msd_options'.format(language), msd_options)
+    helper.save_file('../data/pickles/{}-idx_2_char'.format(language), idx_2_char)
+    helper.save_file('../data/pickles/{}-char_2_idx'.format(language), char_2_idx)
+    helper.save_file('../data/pickles/{}-idx_2_desc'.format(language), idx_2_desc)
+    helper.save_file('../data/pickles/{}-desc_2_idx'.format(language), desc_2_idx)
+
+    if msd_options is not None:
+        helper.save_file('../data/pickles/{}-msd_options'.format(language), msd_options)
 
     print('  - Done')
 
@@ -90,7 +122,7 @@ def convert_to_dicts(all_out, language):
 def main(language, rewrite=False):
 
     datapath = '../data/files/{}-task3-train'.format(language)
-    all_out  = read_task_3(datapath)
+    all_out  = helper.read_task_3(datapath)
 
     if (not os.path.exists('../data/pickles/{}-idx_2_char'.format(language))) or rewrite:
         convert_to_dicts(all_out, language)

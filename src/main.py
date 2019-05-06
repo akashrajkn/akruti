@@ -10,6 +10,7 @@ import torch.nn.functional as F
 import numpy as np
 
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 from timeit import default_timer as timer
 from datetime import timedelta
 
@@ -75,13 +76,13 @@ def initialize_dataloader(run_type, language, batch_size, shuffle):
     char_2_idx = load_file('../data/pickles/{}-char_2_idx'.format(language))
     idx_2_desc = load_file('../data/pickles/{}-idx_2_desc'.format(language))
     desc_2_idx = load_file('../data/pickles/{}-desc_2_idx'.format(language))
-    msd_types  = load_file('../data/pickles/{}-msd_options'.format(language))  # label types
+    # msd_types  = load_file('../data/pickles/{}-msd_options'.format(language))  # label types
 
     file_name  = '{}-task3-{}'.format(language, run_type)
     morph_data = MorphologyDatasetTask3(csv_file='../data/files/{}'.format(file_name),
                                         language=language, get_unprocessed=(run_type == 'test'))
 
-    morph_data.set_vocabulary(char_2_idx, idx_2_char, desc_2_idx, idx_2_desc, msd_types)
+    morph_data.set_vocabulary(char_2_idx, idx_2_char, desc_2_idx, idx_2_desc, None)
     dataloader = DataLoader(morph_data, batch_size=batch_size, shuffle=shuffle, num_workers=2)
 
     return dataloader, morph_data
@@ -161,6 +162,9 @@ def train(config, dont_save):
     '''
     Train function
     '''
+    # Writer will output to ./runs/ directory by default
+    writer = SummaryWriter()
+
     # Get train_dataloader
     train_loader, morph_dat = initialize_dataloader(run_type='train', language=config['language'],
                                                      batch_size=config['batch_size'], shuffle=True)
@@ -168,7 +172,7 @@ def train(config, dont_save):
     config['vocab_size']    = morph_dat.get_vocab_size()
     config['padding_idx']   = morph_dat.padding_idx
     config['max_seq_len']   = morph_dat.max_seq_len
-    config['label_len']     = morph_dat.label_len
+    config['label_len']     = len(morph_dat.desc_2_idx)
 
     if not torch.cuda.is_available():
         device    = torch.device('cpu')
@@ -246,7 +250,12 @@ def train(config, dont_save):
                                                            clamp_KLD.detach().cpu().item(),
                                                            kl_weight,
                                                            loss.detach().cpu().item())
-            kl_weight    = min(config['lambda_m'], kl_weight + anneal_rate)
+            writer.add_scalar('BCE loss',  bce_loss.detach().cpu().item())
+            writer.add_scalar('KLD',       clamp_KLD.detach().cpu().item())
+            writer.add_scalar('kl_weight', kl_weight)
+            writer.add_scalar('Loss',      loss.detach().cpu().item())
+
+            kl_weight    = min(1.0, kl_weight + anneal_rate)
 
         end = timer()
 
@@ -286,7 +295,7 @@ if __name__ == "__main__":
     parser.add_argument('-dec_h_dim',    action="store", type=int,   default=512)
     parser.add_argument('-char_emb_dim', action="store", type=int,   default=300)
     parser.add_argument('-tag_emb_dim',  action="store", type=int,   default=200)
-    parser.add_argument('-enc_dropout',  action="store", type=float, default=0.4)
+    parser.add_argument('-enc_dropout',  action="store", type=float, default=0.0)
     parser.add_argument('-dec_dropout',  action="store", type=float, default=0.4)
     parser.add_argument('-z_dim',        action="store", type=int,   default=150)
     parser.add_argument('-batch_size',   action="store", type=int,   default=64)

@@ -18,15 +18,14 @@ class MorphologyDatasetTask3(Dataset):
     def __init__(self, csv_file, language, get_unprocessed=False, root_dir='../data/files', delimiter='\t'):
         """
         Args:
-            csv_file (string): Path to the csv file with annotations.
-            language (string): Language
-            root_dir (string): Directory with all the data.
+            csv_file (string) : Path to the csv file with annotations.
+            language (string) : Language
+            root_dir (string) : Directory with all the data.
         """
-        self.csv_file = csv_file
-        self.language = language
-        self.root_dir = root_dir
-
-        self.get_unprocessed = get_unprocessed  # raw output. FIXME: This is not efficient
+        self.csv_file        = csv_file
+        self.language        = language
+        self.root_dir        = root_dir
+        self.get_unprocessed = get_unprocessed  # raw output
 
         self.pd_data     = pd.read_csv(csv_file, delimiter=delimiter, header=None)
         self.max_seq_len = self._max_sequence_length()
@@ -37,22 +36,17 @@ class MorphologyDatasetTask3(Dataset):
     def __getitem__(self, idx):
 
         msd = self.pd_data.iloc[idx, 1]
-        out = {}
         msds = msd.strip().split(',')
-
-        for m in msds:
-            current = m.strip().split('=')
-            out[current[0]] = current[1]
 
         sample = {
             'source_form': self._prepare_sequence(self.pd_data.iloc[idx, 0]),
-            'msd'        : self._prepare_msd(out),
+            'msd'        : self._prepare_msd_each_feature(msds),
             'target_form': self._prepare_sequence(self.pd_data.iloc[idx, 2])
         }
 
         if self.get_unprocessed:
             sample['source_str'] = self.pd_data.iloc[idx, 0]
-            sample['msd_str'] = self.pd_data.iloc[idx, 1]
+            sample['msd_str']    = self.pd_data.iloc[idx, 1]
             sample['target_str'] = self.pd_data.iloc[idx, 2]
 
         return sample
@@ -65,7 +59,9 @@ class MorphologyDatasetTask3(Dataset):
         self.idx_2_desc  = idx_2_desc
         self.msd_types   = msd_types
         self.padding_idx = char_2_idx['<PAD>']
-        self.label_len   = get_label_length(idx_2_desc, msd_types) + 1  # last index is for None
+
+        if msd_types is not None:
+            self.label_len = get_label_length(idx_2_desc, msd_types) + 1  # last index is for None
 
 
     def get_vocab_size(self):
@@ -112,12 +108,42 @@ class MorphologyDatasetTask3(Dataset):
 
         return torch.tensor(output).type(torch.LongTensor)
 
-    def _prepare_msd(self, msd):
+    def _prepare_msd_each_feature(self, msds):
         '''
-        msd   : {'pos': 'verb', 'tense': 'present', 'mod': 'ind'}
-        # output: [0, 5, 7, 10, ...] length: |label_types|
-        output: [0, 1, 0, 0, ....] length: |label_len|
+        msds   -- ['pos=verb', 'tense=present', ...]
+        output -- [[0, 1, 0, 0, ....] length: |msd_seq_len|]
         '''
+        msd_seq_len = len(self.desc_2_idx)
+        output      = []
+
+        for m in msds:
+            one_hot = [0] * msd_seq_len
+            idx     = self.desc_2_idx.get(m)
+
+            if idx is None:
+                idx = self.desc_2_idx['<unkMSD>']
+
+            one_hot[idx] = 1
+            output.append(one_hot)
+
+        while len(output) < msd_seq_len:
+            output.append([0] * msd_seq_len)  # equivalent of giving padding_idx to nn.Embedding
+
+        return torch.tensor(output).type(torch.FloatTensor)
+
+
+    def _prepare_msd(self, msds):
+        '''
+        msds   -- {'pos': 'verb', 'tense': 'present', 'mod': 'ind'}
+        output -- [0, 1, 0, 0, ....] length: |label_len|
+        # output -- [0, 5, 7, 10, ...] length: |label_types|
+        '''
+        msd = {}
+
+        for m in msds:
+            current = m.strip().split('=')
+            msd[current[0]] = current[1]
+
         label_types = len(self.idx_2_desc)
         output      = []
 
@@ -140,5 +166,7 @@ class MorphologyDatasetTask3(Dataset):
                 one_hot[self.label_len - 1] = 1
 
             output.append(one_hot)
+
+            # TODO: Return vector of zeros instead of padding index - because I am using torch.bmm
 
         return torch.tensor(output).type(torch.FloatTensor)

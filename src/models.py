@@ -10,7 +10,7 @@ import torch.nn.functional as F
 
 class WordEncoder(nn.Module):
     def __init__(self, input_dim, emb_dim=300, enc_h_dim=256, z_dim=150,
-                 dropout=0.4, padding_idx=None, device=None):
+                 dropout=0.0, padding_idx=None, device=None):
         '''
         input_dim   -- vocabulary(characters) size
         emb_dim     -- character embedding dimension
@@ -24,15 +24,16 @@ class WordEncoder(nn.Module):
         self.enc_h_dim = enc_h_dim
         self.z_dim       = z_dim
         self.device      = device
+        self.padding_idx = padding_idx
 
-        self.embedding   = nn.Embedding(input_dim, emb_dim)
-        self.rnn         = nn.GRU(emb_dim, enc_h_dim, bidirectional = True)
+        self.embedding   = nn.Embedding(input_dim, emb_dim, padding_idx=padding_idx)
+        self.rnn         = nn.GRU(emb_dim, enc_h_dim, bidirectional=True)
         self.fc_mu       = nn.Linear(enc_h_dim * 2, z_dim)
         self.fc_sigma    = nn.Linear(enc_h_dim * 2, z_dim)
-        self.dropout     = nn.Dropout(dropout)  # NOTE: This is not being used
+        self.dropout     = nn.Dropout(dropout)
 
     def forward(self, src):
-        embedded         = self.embedding(src)
+        embedded         = self.dropout(self.embedding(src))
         _, hidden        = self.rnn(embedded)
         hidden           = torch.cat((hidden[-2,:,:], hidden[-1,:,:]), dim = 1)
 
@@ -88,7 +89,7 @@ class Attention(nn.Module):
         tag_embeds -- tag embeddings
         '''
         batch_size = tag_embeds.shape[0]
-        src_len    = tag_embeds.shape[1]  # Should be seq_len: 11 in the case of Turkish
+        src_len    = tag_embeds.shape[1]  # sequence length
 
         hidden     = hidden.unsqueeze(1).repeat(1, src_len, 1)
         energy     = torch.tanh(self.attn(torch.cat((hidden, tag_embeds), dim=2)))
