@@ -116,18 +116,27 @@ class MorphologyDatasetTask3(Dataset):
         msd_seq_len = len(self.desc_2_idx)
         output      = []
 
-        for m in msds:
+        for idx in self.idx_2_desc:
             one_hot = [0] * msd_seq_len
-            idx     = self.desc_2_idx.get(m)
 
-            if idx is None:
-                idx = self.desc_2_idx['<unkMSD>']
+            # NOTE, FIXME: This does not take into account <unkMSD>.
+            if self.idx_2_desc[idx] in msds:
+                one_hot[idx] = 1
 
-            one_hot[idx] = 1
             output.append(one_hot)
 
-        while len(output) < msd_seq_len:
-            output.append([0] * msd_seq_len)  # equivalent of giving padding_idx to nn.Embedding
+        # for m in msds:
+        #     one_hot = [0] * msd_seq_len
+        #     idx     = self.desc_2_idx.get(m)
+        #
+        #     if idx is None:
+        #         idx = self.desc_2_idx['<unkMSD>']
+        #
+        #     one_hot[idx] = 1
+        #     output.append(one_hot)
+        #
+        # while len(output) < msd_seq_len:
+        #     output.append([0] * msd_seq_len)  # equivalent of giving padding_idx to nn.Embedding
 
         return torch.tensor(output).type(torch.FloatTensor)
 

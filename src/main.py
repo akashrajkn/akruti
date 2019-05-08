@@ -14,7 +14,7 @@ from torch.utils.tensorboard import SummaryWriter
 from timeit import default_timer as timer
 from datetime import timedelta
 
-from models import WordEncoder, Attention, TagEmbedding, WordDecoder, MSVED
+from models import WordEncoder, Attention, TagEmbedding, WordDecoder, MSVED, KumaMSD
 from helper import load_file
 from dataset import MorphologyDatasetTask3
 
@@ -33,6 +33,14 @@ def initialize_model(config):
         device    = torch.device(config['device'])
 
     encoder       = WordEncoder(input_dim   =config['vocab_size'],
+                                emb_dim     =config['char_emb_dim'],
+                                enc_h_dim   =config['enc_h_dim'],
+                                z_dim       =config['z_dim'],
+                                dropout     =config['enc_dropout'],
+                                padding_idx =config['padding_idx'],
+                                device      =device)
+
+    encoder_x_t   = WordEncoder(input_dim   =config['vocab_size'],
                                 emb_dim     =config['char_emb_dim'],
                                 enc_h_dim   =config['enc_h_dim'],
                                 z_dim       =config['z_dim'],
@@ -64,7 +72,12 @@ def initialize_model(config):
                           vocab_size        =config['vocab_size'],
                           device            =device).to(device)
 
-    return model
+    kumaMSD       = KumaMSD(input_dim       =config['enc_h_dim'] * 2,
+                            h_dim           =config['msd_h_dim'],
+                            num_tags        =config['label_len'],
+                            encoder         =encoder_x_t).to(device)
+
+    return model, kumaMSD
 
 
 def initialize_dataloader(run_type, language, batch_size, shuffle):
@@ -76,7 +89,6 @@ def initialize_dataloader(run_type, language, batch_size, shuffle):
     char_2_idx = load_file('../data/pickles/{}-char_2_idx'.format(language))
     idx_2_desc = load_file('../data/pickles/{}-idx_2_desc'.format(language))
     desc_2_idx = load_file('../data/pickles/{}-desc_2_idx'.format(language))
-    # msd_types  = load_file('../data/pickles/{}-msd_options'.format(language))  # label types
 
     file_name  = '{}-task3-{}'.format(language, run_type)
     morph_data = MorphologyDatasetTask3(csv_file='../data/files/{}'.format(file_name),
@@ -116,7 +128,7 @@ def test(language, model_id, dont_save):
                                            batch_size=1, shuffle=False)
     idx_2_char     = d.idx_2_char
 
-    model          = initialize_model(config)
+    model, _       = initialize_model(config)
     model.load_state_dict(checkpoint['model_state_dict'])
 
     model.eval()
@@ -175,17 +187,20 @@ def train(config, dont_save):
     config['label_len']     = len(morph_dat.desc_2_idx)
 
     if not torch.cuda.is_available():
-        device    = torch.device('cpu')
+        device      = torch.device('cpu')
     else:
-        device    = torch.device(config['device'])
+        device      = torch.device(config['device'])
 
     # Model declaration
-    model         = initialize_model(config)
-    optimizer     = optim.SGD(model.parameters(), lr=config['lr'])
-    loss_function = nn.CrossEntropyLoss()
+    model, kumaMSD  = initialize_model(config)
+    params          = list(model.parameters()) + list(kumaMSD.parameters())
+    optimizer       = optim.SGD(params,   lr=config['lr'])
+    # m_optimizer     = optim.SGD(kumaMSD.parameters(), lr=config['lr'])
+    loss_function   = nn.CrossEntropyLoss()
+    m_loss_function = nn.MSELoss()
 
-    kl_weight     = config['kl_start']
-    anneal_rate   = (1.0 - config['kl_start']) / (config['epochs'] * len(train_loader))
+    kl_weight       = config['kl_start']
+    anneal_rate     = (1.0 - config['kl_start']) / (config['epochs'] * len(train_loader))
 
     config['anneal_rate'] = anneal_rate
 
@@ -197,6 +212,7 @@ def train(config, dont_save):
     print('    MODEL')
     print('-' * 13)
     print(model)
+    print(kumaMSD)
     print('-' * 13)
     print('    TRAIN')
     print('-' * 13)
@@ -205,12 +221,13 @@ def train(config, dont_save):
         try:
             os.mkdir('../models/{}-{}'.format(config['language'], config['model_id']))
         except OSError:
-            print("Directory already exists")
+            print("Directory/Model already exists")
             return
 
     epoch_details = 'epoch, bce_loss, kl_div, kl_weight, loss\n'
 
     model.train()
+    kumaMSD.train()
     for epoch in range(config['epochs']):
 
         start      = timer()
@@ -227,35 +244,60 @@ def train(config, dont_save):
             y_t = torch.transpose(y_t, 0, 1)
             x_t = torch.transpose(x_t, 0, 1)
 
-            x_t_p, mu, logvar = model(x_s, x_t, y_t)
+            def process_unsup_msd(batch_y_t):
+                y_t_len = batch_y_t.size(0)
+                output  = []
+
+                for i in range(y_t_len):
+                    one_hot = [0.] * y_t_len
+                    one_hot[i] = batch_y_t[i]
+                    output.append(one_hot)
+
+                return torch.tensor(output).to(device)
+
+            y_t_pp = y_t
+            if y_t is not None:
+                y_t_p, m_mu, m_logvar = kumaMSD(x_t)
+                y_t_pp                = torch.stack([process_unsup_msd(batch) for batch in y_t_p])
+                y_t_pp                = y_t_pp.permute(1, 0, 2)
+
+            x_t_p, mu, logvar = model(x_s, x_t, y_t_pp)
 
             x_t_p = x_t_p[1:].view(-1, x_t_p.shape[-1])
-            x_t   = x_t[1:].contiguous().view(-1)
+            x_t_a = x_t[1:].contiguous().view(-1)
 
-            bce_loss = loss_function(x_t_p, x_t)
+            bce_loss = loss_function(x_t_p, x_t_a)
             kl_term  = kl_div(mu, logvar)
 
             # ha bits , like free bits but over whole layer
             # REFERENCE: https://github.com/kastnerkyle/pytorch-text-vae
             habits_lambda = config['lambda_m']
             clamp_KLD     = torch.clamp(kl_term.mean(), min=habits_lambda).squeeze()
-
             loss          = bce_loss + kl_weight * clamp_KLD
-            loss.backward()
+
+            y_t_squashed  = torch.sum(y_t, dim=0).squeeze(0)
+            m_kl_term     = kl_div(m_mu, m_logvar)
+            m_clamp_KLD   = torch.clamp(m_kl_term.mean(), min=habits_lambda).squeeze()
+            m_loss        = m_loss_function(y_t_p, y_t_squashed) + kl_weight * m_clamp_KLD
+
+            total_loss    = loss + m_loss
+            total_loss.backward()
             optimizer.step()
 
-            epoch_loss  += loss.detach().cpu().item()
+            epoch_loss    += loss.detach().cpu().item()
             epoch_details += '{}, {}, {}, {}, {}\n'.format(epoch,
                                                            bce_loss.detach().cpu().item(),
                                                            clamp_KLD.detach().cpu().item(),
                                                            kl_weight,
                                                            loss.detach().cpu().item())
-            writer.add_scalar('BCE loss',  bce_loss.detach().cpu().item())
-            writer.add_scalar('KLD',       clamp_KLD.detach().cpu().item())
-            writer.add_scalar('kl_weight', kl_weight)
-            writer.add_scalar('Loss',      loss.detach().cpu().item())
+            writer.add_scalar('BCE loss',   bce_loss.detach().cpu().item())
+            writer.add_scalar('KLD',        clamp_KLD.detach().cpu().item())
+            writer.add_scalar('kl_weight',  kl_weight)
+            writer.add_scalar('Loss',       loss.detach().cpu().item())
+            writer.add_scalar('Total Loss', total_loss.detach().cpu().item())
+            #writer.add_scalar('M_Loss',    m_loss.detach().cpu().item())
 
-            kl_weight    = min(1.0, kl_weight + anneal_rate)
+            kl_weight     = min(1.0, kl_weight + anneal_rate)
 
         end = timer()
 
@@ -302,6 +344,7 @@ if __name__ == "__main__":
     parser.add_argument('-kl_start',     action="store", type=float, default=0.0)
     parser.add_argument('-lambda_m',     action="store", type=float, default=0.2)
     parser.add_argument('-lr',           action="store", type=float, default=0.1)
+    parser.add_argument('-kuma_msd',     action="store", type=int,   default=256)
 
     args                    = parser.parse_args()
     run_train               = args.train
@@ -324,6 +367,7 @@ if __name__ == "__main__":
     config['batch_size']    = args.batch_size
     config['device']        = args.device
     config['lr']            = args.lr
+    config['msd_h_dim']     = args.kuma_msd
 
     # TRAIN
     if run_train:

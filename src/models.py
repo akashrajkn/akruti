@@ -7,6 +7,8 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 
+from kuma import HardKumaraswamy
+
 
 class WordEncoder(nn.Module):
     def __init__(self, input_dim, emb_dim=300, enc_h_dim=256, z_dim=150,
@@ -21,7 +23,7 @@ class WordEncoder(nn.Module):
 
         self.input_dim   = input_dim
         self.emb_dim     = emb_dim
-        self.enc_h_dim = enc_h_dim
+        self.enc_h_dim   = enc_h_dim
         self.z_dim       = z_dim
         self.device      = device
         self.padding_idx = padding_idx
@@ -174,10 +176,7 @@ class MSVED(nn.Module):
 
         return mu + eps * std
 
-    def forward(self, x_s, x_t, y_t=None):
-        # Semi supervised
-        if y_t is None:
-            pass
+    def forward(self, x_s, x_t, y_t):
 
         batch_size     = x_s.shape[1]
         outputs        = torch.zeros(self.max_len, batch_size, self.vocab_size).to(self.device)
@@ -193,3 +192,33 @@ class MSVED(nn.Module):
             o          = o.max(1)[1]
 
         return outputs, mu_u, var_u
+
+
+class KumaMSD(nn.Module):
+    '''
+    Generates samples of y_t (MSD) vector.
+    '''
+    def __init__(self, input_dim, h_dim, num_tags, encoder, l=-1., r=2.):
+        super(KumaMSD, self).__init__()
+
+        self.input_dim = input_dim
+        self.h_dim     = h_dim
+        self.num_tags  = num_tags
+        self.encoder   = encoder
+        self.support   = [-l, r]
+
+        # TODO: initialization
+        self.fc = nn.Linear(input_dim, h_dim)
+        self.ai = nn.Linear(h_dim, num_tags)
+        self.bi = nn.Linear(h_dim, num_tags)
+
+    def forward(self, x_t):
+
+        h, mu, logvar = self.encoder(x_t)
+        logits  = F.relu(self.fc(h))
+        ai      = F.softplus(self.ai(logits))
+        bi      = F.softplus(self.bi(logits))
+
+        sample  = HardKumaraswamy(ai, bi, self.support).rsample()
+
+        return sample, mu, logvar
