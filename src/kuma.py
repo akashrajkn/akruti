@@ -9,8 +9,17 @@ from torch.distributions.transforms import Transform, AffineTransform, PowerTran
 from torch.distributions import constraints
 from torch.distributions.utils import broadcast_all
 
+
 # might be importable from torch.distributions.utils in a future pytorch version
 euler_constant = 0.57721566490153286060
+
+
+def _lbeta(a, b):
+    return torch.lgamma(a) + torch.lgamma(b) - torch.lgamma(a + b)
+
+
+def _harmonic_number(x):
+    return torch.digamma(x + 1) + euler_constant
 
 
 class Kumaraswamy(TransformedDistribution):
@@ -62,10 +71,15 @@ class Kumaraswamy(TransformedDistribution):
         return _moments(self.a, self.b, 2) - torch.pow(self.mean, 2)
 
     def entropy(self):
-        t1 = (1 - self.a.reciprocal())
-        t0 = (1 - self.b.reciprocal())
-        H0 = torch.digamma(self.b + 1) + euler_constant
-        return t1 + t0 * H0 + torch.log(self.a) + torch.log(self.b)
+            return (1 - self.b_reciprocal) + (1 - self.a_reciprocal) * _harmonic_number(self.b) \
+                    - torch.log(self.a) - torch.log(self.b)
+
+    @register_kl(Kumaraswamy, Kumaraswamy)
+    def _kl_kumaraswamy_kumaraswamy(p, q):
+        x = p.sample(sample_shape=torch.Size([1]))  # TODO: more samples?
+        p_entropy = p.entropy()  # TODO: exact or estimate p.log_prob(x).mean(0)?
+        cross_entropy = - q.log_prob(x).mean(0)
+        return - p_entropy + cross_entropy
 
 def _moments(a, b, n):
     """
@@ -93,7 +107,6 @@ class StretchedKumaraswamy(TransformedDistribution):
         super(StretchedKumaraswamy, self).__init__(
             Kumaraswamy(a, b), AffineTransform(loc=loc, scale=scale),
             validate_args=validate_args)
-
 
 class HardKumaraswamy(StretchedKumaraswamy):
 
@@ -123,3 +136,69 @@ class HardKumaraswamy(StretchedKumaraswamy):
 
     def rsample(self):
         return F.hardtanh(super().rsample(), min_val=0., max_val=1.)
+
+    def log_prob(self, value):
+        # x ~ p(x), and y = hardtanh(x) -> y ~ q(y)
+
+        # log_q(x==0) = cdf_p(0) and log_q(x) = log_q(x)
+        zeros = torch.zeros_like(value)
+        log_p = torch.where(value == zeros,
+                            torch.log(self.stretched.cdf(zeros)),
+                            self.stretched.log_prob(value))
+
+        # log_q(x==1) = 1 - cdf_p(1)
+        ones = torch.ones_like(value)
+        log_p = torch.where(value == ones,
+                            torch.log(1 - self.stretched.cdf(ones)),
+                            log_p)
+
+        return log_p
+
+    def cdf(self, value):
+        """
+        Note that HardKuma.cdf(0) = HardKuma.pdf(0) by definition of HardKuma.pdf(0),
+         also note that HardKuma.cdf(1) = 1 by definition because
+         the support of HardKuma is the *closed* interval [0, 1]
+         and not the open interval (left, right) which is the support of the stretched variable.
+        """
+        cdf = torch.where(
+            value < torch.ones_like(value),
+            self.stretched.cdf(value),
+            torch.ones_like(value)  # all of the mass
+        )
+        return cdf
+
+    @register_kl(HardKumaraswamy, HardKumaraswamy)
+    def _kl_hardkumaraswamy_hardkumaraswamy(p, q):
+        assert type(p.base) is type(q.base) and p.loc == q.loc and p.scale == q.scale
+
+        # wrt (lower, upper)
+        x = p.sample(sample_shape=torch.Size([10]))  # TODO: more samples?
+        estimate = (p.log_prob(x) - q.log_prob(x)).mean(0)
+
+        return estimate
+
+    #@register_kl(HardKumaraswamy, HardKumaraswamy)
+    def __kl_hardkumaraswamy_hardkumaraswamy(p, q):
+        assert type(p.base) is type(q.base) and p.loc == q.loc and p.scale == q.scale
+
+        # wrt (lower, upper)
+        proposal = p.base
+        x = proposal.sample(sample_shape=torch.Size([1]))  # TODO: more samples?
+        klc = (torch.exp(p.log_prob(x) - proposal.log_prob(x)) * (p.log_prob(x) - q.log_prob(x))).mean(0)
+
+        # wrt lower
+        zeros = torch.zeros_like(klc)
+        log_p0 = p.log_prob(zeros)
+        p0 = torch.exp(log_p0)
+        log_q0 = q.log_prob(zeros)
+        kl0 = p0 * (log_p0 - log_q0)
+
+        # wrt upper
+        ones = torch.ones_like(klc)
+        log_p1 = p.log_prob(ones)
+        p1 = torch.exp(log_p1)
+        log_q1 = q.log_prob(ones)
+        kl1 = p1 * (log_p1 - log_q1)
+
+        return kl0 + kl1 + klc
