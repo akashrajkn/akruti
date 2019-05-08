@@ -3,6 +3,7 @@ data/pickles/*
 data/files/*
 models/*
 results/*
+runs/*
 
 
 # Byte-compiled / optimized / DLL files

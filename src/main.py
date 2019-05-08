@@ -175,7 +175,7 @@ def train(config, dont_save):
     Train function
     '''
     # Writer will output to ./runs/ directory by default
-    writer = SummaryWriter()
+    writer = SummaryWriter(log_dir='../runs/')
 
     # Get train_dataloader
     train_loader, morph_dat = initialize_dataloader(run_type='train', language=config['language'],
