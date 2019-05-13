@@ -15,7 +15,6 @@ from timeit import default_timer as timer
 from datetime import timedelta
 
 from models import WordEncoder, Attention, TagEmbedding, WordDecoder, MSVED, KumaMSD
-from helper import load_file
 from dataset import MorphologyDatasetTask3
 
 
@@ -80,21 +79,13 @@ def initialize_model(config):
     return model, kumaMSD
 
 
-def initialize_dataloader(run_type, language, batch_size, shuffle):
+def initialize_dataloader(run_type, language, vocab, batch_size, shuffle):
     '''
     Initializes train and test dataloaders
     '''
-    # Set up data
-    idx_2_char = load_file('../data/pickles/{}-idx_2_char'.format(language))
-    char_2_idx = load_file('../data/pickles/{}-char_2_idx'.format(language))
-    idx_2_desc = load_file('../data/pickles/{}-idx_2_desc'.format(language))
-    desc_2_idx = load_file('../data/pickles/{}-desc_2_idx'.format(language))
+    is_test    = (run_type == 'test')
 
-    file_name  = '{}-task3-{}'.format(language, run_type)
-    morph_data = MorphologyDatasetTask3(csv_file='../data/files/{}'.format(file_name),
-                                        language=language, get_unprocessed=(run_type == 'test'))
-
-    morph_data.set_vocabulary(char_2_idx, idx_2_char, desc_2_idx, idx_2_desc, None)
+    morph_data = MorphologyDatasetTask3(test=is_test, language=language, vocab=vocab, get_unprocessed=is_test)
     dataloader = DataLoader(morph_data, batch_size=batch_size, shuffle=shuffle, num_workers=2)
 
     return dataloader, morph_data
@@ -107,7 +98,7 @@ def kl_div(mu, logvar):
     return - 0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
 
 
-def test(language, model_id, dont_save):
+def test(language, model_id, vocab, dont_save):
     '''
     Test function
     '''
@@ -125,7 +116,7 @@ def test(language, model_id, dont_save):
         device     = torch.device(config['device'])
 
     test_loader, d = initialize_dataloader(run_type='test', language=config['language'],
-                                           batch_size=1, shuffle=False)
+                                           vocab=vocab, batch_size=1, shuffle=False)
     idx_2_char     = d.idx_2_char
 
     model, _       = initialize_model(config)
@@ -170,7 +161,7 @@ def test(language, model_id, dont_save):
         f.write(output)
 
 
-def train(config, dont_save):
+def train(config, vocab, dont_save):
     '''
     Train function
     '''
@@ -179,7 +170,7 @@ def train(config, dont_save):
 
     # Get train_dataloader
     train_loader, morph_dat = initialize_dataloader(run_type='train', language=config['language'],
-                                                     batch_size=config['batch_size'], shuffle=True)
+                                                    vocab=vocab, batch_size=config['batch_size'], shuffle=True)
 
     config['vocab_size']    = morph_dat.get_vocab_size()
     config['padding_idx']   = morph_dat.padding_idx
@@ -369,10 +360,12 @@ if __name__ == "__main__":
     config['lr']            = args.lr
     config['msd_h_dim']     = args.kuma_msd
 
+    vocab                   = Vocabulary(language=config['language'])
+
     # TRAIN
     if run_train:
-        train(config, dont_save)
+        train(config, vocab, dont_save)
 
     # TEST
     if run_test:
-        test(config['language'], config['model_id'], dont_save)
+        test(config['language'], config['model_id'], vocab, dont_save)
