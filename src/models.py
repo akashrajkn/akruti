@@ -7,7 +7,8 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 
-from kuma import HardKumaraswamy
+from kumaraswamy import Kumaraswamy
+from hard_kumaraswamy import StretchedAndRectifiedDistribution
 
 
 class WordEncoder(nn.Module):

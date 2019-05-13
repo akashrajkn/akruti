@@ -15,7 +15,7 @@ from timeit import default_timer as timer
 from datetime import timedelta
 
 from models import WordEncoder, Attention, TagEmbedding, WordDecoder, MSVED, KumaMSD
-from dataset import MorphologyDatasetTask3
+from dataset import MorphologyDatasetTask3, Vocabulary
 
 
 def initialize_model(config):
@@ -186,7 +186,6 @@ def train(config, vocab, dont_save):
     model, kumaMSD  = initialize_model(config)
     params          = list(model.parameters()) + list(kumaMSD.parameters())
     optimizer       = optim.SGD(params,   lr=config['lr'])
-    # m_optimizer     = optim.SGD(kumaMSD.parameters(), lr=config['lr'])
     loss_function   = nn.CrossEntropyLoss()
     m_loss_function = nn.MSELoss()
 
@@ -247,7 +246,7 @@ def train(config, vocab, dont_save):
                 return torch.tensor(output).to(device)
 
             y_t_pp = y_t
-            if y_t is not None:
+            if y_t is None:
                 y_t_p, m_mu, m_logvar = kumaMSD(x_t)
                 y_t_pp                = torch.stack([process_unsup_msd(batch) for batch in y_t_p])
                 y_t_pp                = y_t_pp.permute(1, 0, 2)
@@ -267,11 +266,14 @@ def train(config, vocab, dont_save):
             loss          = bce_loss + kl_weight * clamp_KLD
 
             y_t_squashed  = torch.sum(y_t, dim=0).squeeze(0)
-            m_kl_term     = kl_div(m_mu, m_logvar)
-            m_clamp_KLD   = torch.clamp(m_kl_term.mean(), min=habits_lambda).squeeze()
-            m_loss        = m_loss_function(y_t_p, y_t_squashed) + kl_weight * m_clamp_KLD
+            total_loss    = loss
 
-            total_loss    = loss + m_loss
+            if y_t is None:
+                m_kl_term     = kl_div(m_mu, m_logvar)
+                m_clamp_KLD   = torch.clamp(m_kl_term.mean(), min=habits_lambda).squeeze()
+                m_loss        = m_loss_function(y_t_p, y_t_squashed) + kl_weight * m_clamp_KLD
+                total_loss   += m_loss
+
             total_loss.backward()
             optimizer.step()
 
