@@ -227,8 +227,12 @@ def train(config, vocab, dont_save):
             optimizer.zero_grad()
 
             x_s = sample_batched['source_form'].to(device)
-            y_t = sample_batched['msd'].to(device)
             x_t = sample_batched['target_form'].to(device)
+            y_t = sample_batched['msd']
+
+            # TODO: unsupervised case
+            if y_t == '<UNLABELED>':
+                continue
 
             x_s = torch.transpose(x_s, 0, 1)
             y_t = torch.transpose(y_t, 0, 1)
@@ -246,7 +250,7 @@ def train(config, vocab, dont_save):
                 return torch.tensor(output).to(device)
 
             y_t_pp = y_t
-            if y_t is None:
+            if y_t is '<UNLABELED>':
                 y_t_p, m_mu, m_logvar = kumaMSD(x_t)
                 y_t_pp                = torch.stack([process_unsup_msd(batch) for batch in y_t_p])
                 y_t_pp                = y_t_pp.permute(1, 0, 2)
@@ -338,6 +342,8 @@ if __name__ == "__main__":
     parser.add_argument('-lambda_m',     action="store", type=float, default=0.2)
     parser.add_argument('-lr',           action="store", type=float, default=0.1)
     parser.add_argument('-kuma_msd',     action="store", type=int,   default=256)
+    parser.add_argument('-a0',           action="store", type=float, default=0.0)
+    parser.add_argument('-b0',           action="store", type=float, default=0.0)
 
     args                    = parser.parse_args()
     run_train               = args.train
@@ -361,6 +367,8 @@ if __name__ == "__main__":
     config['device']        = args.device
     config['lr']            = args.lr
     config['msd_h_dim']     = args.kuma_msd
+    config['a0']            = args.a0
+    config['b0']            = args.b0
 
     vocab                   = Vocabulary(language=config['language'])
 

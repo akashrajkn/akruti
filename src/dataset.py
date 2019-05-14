@@ -36,7 +36,7 @@ class Vocabulary():
 
         # Read files
         common_path   = '../data/files/{}'.format(language)
-        tasks         = ['task1', 'task2p', 'task3']
+        tasks         = ['task1p', 'task2p', 'task3']
         f_types       = ['dev', 'test', 'train']
 
         for task in tasks:
@@ -54,6 +54,10 @@ class Vocabulary():
                 self.vocab_size                 += 1
 
     def _process_msds(self, msd_line):
+
+        if msd_line == '<UNLABELED>':
+            return
+
         msds = msd_line.strip().split(',')
 
         for msd in msds:
@@ -110,12 +114,15 @@ class MorphologyDatasetTask3(Dataset):
 
     def __getitem__(self, idx):
 
-        msd = self.pd_data.iloc[idx, 1]
-        msds = msd.strip().split(',')
+        msd  = self.pd_data.iloc[idx, 1]
+        msds = '<UNLABELED>'
+
+        if msd != '<UNLABELED>':
+            msds = self._prepare_msd_each_feature(msd.strip().split(','))
 
         sample = {
             'source_form': self._prepare_sequence(self.pd_data.iloc[idx, 0]),
-            'msd'        : self._prepare_msd_each_feature(msds),
+            'msd'        : msds,
             'target_form': self._prepare_sequence(self.pd_data.iloc[idx, 2])
         }
 
@@ -136,14 +143,14 @@ class MorphologyDatasetTask3(Dataset):
             self.pd_data  = pd.read_csv(common_path + '-task3-test', delimiter=self.delimiter, header=None)
             return
 
-        tasks         = ['task1', 'task2p', 'task3']
-        f_types       = ['dev', 'test', 'train']
+        tasks         = ['task1p', 'task2p', 'task3']
+        f_types       = ['dev', 'train']
         frames        = []
 
         for task in tasks:
             for f_type in f_types:
 
-                if task == 'task3' and f_type != 'train':
+                if task == 'task3' and f_type == 'dev':
                     continue
 
                 filepath = common_path + '-{}-{}'.format(task, f_type)
