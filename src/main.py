@@ -17,6 +17,8 @@ from datetime import timedelta
 from models import WordEncoder, Attention, TagEmbedding, WordDecoder, MSVED, KumaMSD
 from dataset import MorphologyDatasetTask3, Vocabulary
 
+from kumaraswamy import Kumaraswamy
+
 
 def initialize_model(config):
     '''
@@ -96,6 +98,20 @@ def kl_div(mu, logvar):
     Compute KL divergence between N(mu, logvar) and N(0, 1)
     '''
     return - 0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+
+
+def loss_kuma(supervised, ai=0.0, bi=0.0, a=0.0, b0=0.0):
+    '''
+    If supervised, computes the log probability.
+    In the unsupervised case, computes the KL between the two Kuma distributions
+    '''
+    kuma_prior = Kumaraswamy(a=a0, b=b0)
+
+    if supervised:
+        sample = kuma_prior.sample()
+        return - kuma_prior.log_prob(sample)
+
+    # TODO: unsupervised case
 
 
 def test(language, model_id, vocab, dont_save):
@@ -250,7 +266,7 @@ def train(config, vocab, dont_save):
                 return torch.tensor(output).to(device)
 
             y_t_pp = y_t
-            if y_t is '<UNLABELED>':
+            if y_t == '<UNLABELED>':
                 y_t_p, m_mu, m_logvar = kumaMSD(x_t)
                 y_t_pp                = torch.stack([process_unsup_msd(batch) for batch in y_t_p])
                 y_t_pp                = y_t_pp.permute(1, 0, 2)
@@ -272,7 +288,9 @@ def train(config, vocab, dont_save):
             y_t_squashed  = torch.sum(y_t, dim=0).squeeze(0)
             total_loss    = loss
 
-            if y_t is None:
+            if y_t != '<UNLABELED>':
+                total_loss   += loss_kuma(supervised=True)
+            else:
                 m_kl_term     = kl_div(m_mu, m_logvar)
                 m_clamp_KLD   = torch.clamp(m_kl_term.mean(), min=habits_lambda).squeeze()
                 m_loss        = m_loss_function(y_t_p, y_t_squashed) + kl_weight * m_clamp_KLD
