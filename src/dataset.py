@@ -88,14 +88,16 @@ class Vocabulary():
 class MorphologyDatasetTask3(Dataset):
     """Morphology reinflection dataset."""
 
-    def __init__(self, test, language, vocab, get_unprocessed=False, delimiter='\t'):
+    def __init__(self, test, language, vocab, tasks, get_unprocessed=False, delimiter='\t'):
         """
         Args:
             test (string)     : train or test
             language (string) : Language
+            tasks (list)      : ['task1p', 'task2p']
         """
         self.test            = test
         self.language        = language
+        self.tasks           = tasks
         self.get_unprocessed = get_unprocessed  # raw output
         self.delimiter       = delimiter
 
@@ -143,15 +145,15 @@ class MorphologyDatasetTask3(Dataset):
             self.pd_data  = pd.read_csv(common_path + '-task3-test', delimiter=self.delimiter, header=None)
             return
 
-        tasks         = ['task1p', 'task2p', 'task3']
+        if self.tasks[0] == 'task3':
+            self.pd_data  = pd.read_csv(common_path + '-task3-train', delimiter=self.delimiter, header=None)
+            return
+
         f_types       = ['dev', 'train']
         frames        = []
 
-        for task in tasks:
+        for task in self.tasks:
             for f_type in f_types:
-
-                if task == 'task3' and f_type == 'dev':
-                    continue
 
                 filepath = common_path + '-{}-{}'.format(task, f_type)
 

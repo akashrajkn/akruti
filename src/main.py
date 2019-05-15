@@ -1,5 +1,6 @@
 import os
 import pickle
+import random
 import logging
 import argparse
 
@@ -18,6 +19,10 @@ from models import WordEncoder, Attention, TagEmbedding, WordDecoder, MSVED, Kum
 from dataset import MorphologyDatasetTask3, Vocabulary
 
 from kumaraswamy import Kumaraswamy
+
+
+np.random.seed(0)
+torch.manual_seed(0)
 
 
 def initialize_model(config):
@@ -81,13 +86,18 @@ def initialize_model(config):
     return model, kumaMSD
 
 
-def initialize_dataloader(run_type, language, vocab, batch_size, shuffle):
+def initialize_dataloader(run_type, language, task, vocab, batch_size, shuffle):
     '''
     Initializes train and test dataloaders
     '''
     is_test    = (run_type == 'test')
 
-    morph_data = MorphologyDatasetTask3(test=is_test, language=language, vocab=vocab, get_unprocessed=is_test)
+    if task == 'sup':
+        tasks = ['task3']
+    else:
+        tasks = ['task1p', 'task2p']
+
+    morph_data = MorphologyDatasetTask3(test=is_test, language=language, vocab=vocab, tasks=tasks, get_unprocessed=is_test)
     dataloader = DataLoader(morph_data, batch_size=batch_size, shuffle=shuffle, num_workers=2)
 
     return dataloader, morph_data
@@ -100,7 +110,7 @@ def kl_div(mu, logvar):
     return - 0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
 
 
-def loss_kuma(supervised, ai=0.0, bi=0.0, a=0.0, b0=0.0):
+def loss_kuma(supervised, ai=0.0, bi=0.0, a0=0.0, b0=0.0):
     '''
     If supervised, computes the log probability.
     In the unsupervised case, computes the KL between the two Kuma distributions
@@ -131,7 +141,7 @@ def test(language, model_id, vocab, dont_save):
     else:
         device     = torch.device(config['device'])
 
-    test_loader, d = initialize_dataloader(run_type='test', language=config['language'],
+    test_loader, d = initialize_dataloader(run_type='test', language=config['language'], task='sup',
                                            vocab=vocab, batch_size=1, shuffle=False)
     idx_2_char     = d.idx_2_char
 
@@ -185,8 +195,10 @@ def train(config, vocab, dont_save):
     writer = SummaryWriter(log_dir='../runs/')
 
     # Get train_dataloader
-    train_loader, morph_dat = initialize_dataloader(run_type='train', language=config['language'],
-                                                    vocab=vocab, batch_size=config['batch_size'], shuffle=True)
+    train_loader_sup, morph_dat = initialize_dataloader(run_type='train', language=config['language'], task='sup',
+                                                        vocab=vocab, batch_size=config['batch_size'], shuffle=True)
+    train_loader_unsup, _       = initialize_dataloader(run_type='train', language=config['language'], task='unsup',
+                                                        vocab=vocab, batch_size=config['batch_size'], shuffle=True)
 
     config['vocab_size']    = morph_dat.get_vocab_size()
     config['padding_idx']   = morph_dat.padding_idx
@@ -206,7 +218,7 @@ def train(config, vocab, dont_save):
     m_loss_function = nn.MSELoss()
 
     kl_weight       = config['kl_start']
-    anneal_rate     = (1.0 - config['kl_start']) / (config['epochs'] * len(train_loader))
+    anneal_rate     = (1.0 - config['kl_start']) / (config['epochs'] * len(train_loader_sup))
 
     config['anneal_rate'] = anneal_rate
 
@@ -239,7 +251,38 @@ def train(config, vocab, dont_save):
         start      = timer()
         epoch_loss = 0
 
-        for i_batch, sample_batched in enumerate(train_loader):
+        it_sup      = iter(train_loader_sup)
+        it_unsup    = iter(train_loader_unsup)
+        done_sup    = False
+        done_unsup  = False
+        num_batches = 0
+
+        # for i_batch, sample_batched in enumerate(train_loader):
+        while True:
+            if done_sup and done_unsup:
+                break
+
+            if done_sup:
+                choice = 'unsup'
+            elif done_unsup:
+                choice = 'sup'
+            else:
+                choice = random.choice(['sup', 'unsup'])
+
+            if choice == 'sup':
+                try:
+                    sample_batched = next(it_sup)
+                except StopIteration:
+                    done_sup = True
+                    continue
+
+            if choice == 'unsup':
+                try:
+                    sample_batched = next(it_unsup)
+                except StopIteration:
+                    done_unsup = True
+                    continue
+
             optimizer.zero_grad()
 
             x_s = sample_batched['source_form'].to(device)
@@ -247,8 +290,10 @@ def train(config, vocab, dont_save):
             y_t = sample_batched['msd']
 
             # TODO: unsupervised case
-            if y_t == '<UNLABELED>':
+            if choice == 'unsup':
                 continue
+            else:
+                y_t = y_t.to(device)
 
             x_s = torch.transpose(x_s, 0, 1)
             y_t = torch.transpose(y_t, 0, 1)
@@ -266,7 +311,7 @@ def train(config, vocab, dont_save):
                 return torch.tensor(output).to(device)
 
             y_t_pp = y_t
-            if y_t == '<UNLABELED>':
+            if choice == 'unsup':
                 y_t_p, m_mu, m_logvar = kumaMSD(x_t)
                 y_t_pp                = torch.stack([process_unsup_msd(batch) for batch in y_t_p])
                 y_t_pp                = y_t_pp.permute(1, 0, 2)
@@ -288,7 +333,7 @@ def train(config, vocab, dont_save):
             y_t_squashed  = torch.sum(y_t, dim=0).squeeze(0)
             total_loss    = loss
 
-            if y_t != '<UNLABELED>':
+            if choice == 'sup':
                 total_loss   += loss_kuma(supervised=True)
             else:
                 m_kl_term     = kl_div(m_mu, m_logvar)
@@ -299,6 +344,7 @@ def train(config, vocab, dont_save):
             total_loss.backward()
             optimizer.step()
 
+            num_batches   += 1
             epoch_loss    += loss.detach().cpu().item()
             epoch_details += '{}, {}, {}, {}, {}\n'.format(epoch,
                                                            bce_loss.detach().cpu().item(),
@@ -316,7 +362,7 @@ def train(config, vocab, dont_save):
 
         end = timer()
 
-        print('Epoch: {}, Loss: {}'.format(epoch, epoch_loss / (i_batch + 1)))
+        print('Epoch: {}, Loss: {}'.format(epoch, epoch_loss / (num_batches + 1)))
         print('         - Time: {}'.format(timedelta(seconds=end - start)))
 
         if dont_save:
@@ -327,7 +373,7 @@ def train(config, vocab, dont_save):
                 'epoch'               : epoch,
                 'model_state_dict'    : model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
-                'loss'                : epoch_loss / (i_batch + 1),
+                'loss'                : epoch_loss / (num_batches + 1),
                 'config'              : config
             }, '../models/{}-{}/model.pt'.format(config['language'], config['model_id']))
 
