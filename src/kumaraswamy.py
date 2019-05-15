@@ -68,6 +68,13 @@ class Kumaraswamy(TransformedDistribution):
         return new
 
     def log_prob(self, value):
+
+        # print("----")
+        # print(self.a)
+        # print("valu")
+        # print(value)
+        # print("----")
+
         return torch.log(self.a + EPS) + torch.log(self.b + EPS) + (self.a - 1) * torch.log(value + EPS) \
             + (self.b - 1) * torch.log(1 - value ** self.a + EPS)
 

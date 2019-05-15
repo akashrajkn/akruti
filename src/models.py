@@ -8,7 +8,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 
 from kumaraswamy import Kumaraswamy
-from hard_kumaraswamy import StretchedAndRectifiedDistribution
+from hard_kumaraswamy import StretchedAndRectifiedDistribution as HardKumaraswamy
 
 
 class WordEncoder(nn.Module):
@@ -209,17 +209,32 @@ class KumaMSD(nn.Module):
         self.support   = [-l, r]
 
         # TODO: initialization
-        self.fc = nn.Linear(input_dim, h_dim)
-        self.ai = nn.Linear(h_dim, num_tags)
-        self.bi = nn.Linear(h_dim, num_tags)
+        # self.fc = nn.Linear(input_dim, h_dim)
+        self.ai = nn.Linear(input_dim, num_tags)
+        self.bi = nn.Linear(input_dim, num_tags)
 
     def forward(self, x_t):
 
-        h, mu, logvar = self.encoder(x_t)
-        logits  = F.relu(self.fc(h))
-        ai      = F.softplus(self.ai(logits))
-        bi      = F.softplus(self.bi(logits))
+        # print("-----")
+        h, _, _ = self.encoder(x_t)
+        # logits  = F.relu(self.fc(h))
 
-        sample  = HardKumaraswamy(ai, bi, self.support).rsample()
+        # print(logits)
 
-        return sample, mu, logvar
+        ai      = F.softplus(self.ai(h))
+        bi      = F.softplus(self.bi(h))
+
+        kuma    = Kumaraswamy(ai, bi)
+
+
+        # print(ai)
+
+        # print(bi)
+
+        sample  = HardKumaraswamy(kuma).rsample()
+
+        # print("****")
+        # print(kuma.a)
+        # print(kuma.b)
+
+        return sample, kuma

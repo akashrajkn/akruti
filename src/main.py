@@ -110,18 +110,17 @@ def kl_div(mu, logvar):
     return - 0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
 
 
-def loss_kuma(supervised, ai=0.0, bi=0.0, a0=0.0, b0=0.0):
+def loss_kuma(kuma_prior, kuma_post):
     '''
     If supervised, computes the log probability.
     In the unsupervised case, computes the KL between the two Kuma distributions
     '''
-    kuma_prior = Kumaraswamy(a=a0, b=b0)
 
-    if supervised:
-        sample = kuma_prior.sample()
-        return - kuma_prior.log_prob(sample)
+    kl_div = -torch.distributions.kl.kl_divergence(kuma_post, kuma_prior)
 
-    # TODO: unsupervised case
+    # print('kl_div: {}'.format(kl_div.size()))
+
+    return torch.sum(kl_div)
 
 
 def test(language, model_id, vocab, dont_save):
@@ -244,6 +243,9 @@ def train(config, vocab, dont_save):
 
     epoch_details = 'epoch, bce_loss, kl_div, kl_weight, loss\n'
 
+    # init kuma prior
+    kuma_prior = Kumaraswamy(torch.zeros(1, config['label_len']), torch.zeros(1, config['label_len']))
+
     model.train()
     kumaMSD.train()
     for epoch in range(config['epochs']):
@@ -253,7 +255,7 @@ def train(config, vocab, dont_save):
 
         it_sup      = iter(train_loader_sup)
         it_unsup    = iter(train_loader_unsup)
-        done_sup    = False
+        done_sup    = True
         done_unsup  = False
         num_batches = 0
 
@@ -283,20 +285,17 @@ def train(config, vocab, dont_save):
                     done_unsup = True
                     continue
 
+            # print("CHOICE = {}".format(choice))
+            # print("****************")
+
+
             optimizer.zero_grad()
 
             x_s = sample_batched['source_form'].to(device)
             x_t = sample_batched['target_form'].to(device)
             y_t = sample_batched['msd']
 
-            # TODO: unsupervised case
-            if choice == 'unsup':
-                continue
-            else:
-                y_t = y_t.to(device)
-
             x_s = torch.transpose(x_s, 0, 1)
-            y_t = torch.transpose(y_t, 0, 1)
             x_t = torch.transpose(x_t, 0, 1)
 
             def process_unsup_msd(batch_y_t):
@@ -310,9 +309,13 @@ def train(config, vocab, dont_save):
 
                 return torch.tensor(output).to(device)
 
-            y_t_pp = y_t
-            if choice == 'unsup':
-                y_t_p, m_mu, m_logvar = kumaMSD(x_t)
+            y_t_p, kuma_post          = kumaMSD(x_t)
+
+            if choice == 'sup':
+                y_t = y_t.to(device)
+                y_t = torch.transpose(y_t, 0, 1)
+                y_t_pp = y_t
+            else:
                 y_t_pp                = torch.stack([process_unsup_msd(batch) for batch in y_t_p])
                 y_t_pp                = y_t_pp.permute(1, 0, 2)
 
@@ -330,18 +333,20 @@ def train(config, vocab, dont_save):
             clamp_KLD     = torch.clamp(kl_term.mean(), min=habits_lambda).squeeze()
             loss          = bce_loss + kl_weight * clamp_KLD
 
-            y_t_squashed  = torch.sum(y_t, dim=0).squeeze(0)
-            total_loss    = loss
+            # print("loss ----")
+            #
+            # print(loss)
+
+            # y_t_squashed  = torch.sum(y_t, dim=0).squeeze(0)
+            kuma_kl = loss_kuma(kuma_prior, kuma_post)
+            clamp_kuma_kld = torch.clamp(kuma_kl.mean(), min=habits_lambda).squeeze()
+            total_loss    = loss - clamp_kuma_kld
 
             if choice == 'sup':
-                total_loss   += loss_kuma(supervised=True)
-            else:
-                m_kl_term     = kl_div(m_mu, m_logvar)
-                m_clamp_KLD   = torch.clamp(m_kl_term.mean(), min=habits_lambda).squeeze()
-                m_loss        = m_loss_function(y_t_p, y_t_squashed) + kl_weight * m_clamp_KLD
-                total_loss   += m_loss
+                total_loss += torch.sum(kuma_post.log_prob(kuma_post.sample()))
 
             total_loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 10)
             optimizer.step()
 
             num_batches   += 1
