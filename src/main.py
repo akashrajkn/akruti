@@ -110,15 +110,16 @@ def kl_div(mu, logvar):
     return - 0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
 
 
-def loss_kuma(kuma_prior, kuma_post):
+def loss_kuma(kuma_prior, kuma_post, supervised=False):
     '''
     If supervised, computes the log probability.
     In the unsupervised case, computes the KL between the two Kuma distributions
     '''
 
-    kl_div = -torch.distributions.kl.kl_divergence(kuma_post, kuma_prior)
+    if supervised:
+        return kuma_prior.log_prob(kuma_prior.sample())
 
-    # print('kl_div: {}'.format(kl_div.size()))
+    kl_div = -torch.distributions.kl.kl_divergence(kuma_post, kuma_prior)
 
     return torch.sum(kl_div)
 
@@ -244,7 +245,9 @@ def train(config, vocab, dont_save):
     epoch_details = 'epoch, bce_loss, kl_div, kl_weight, loss\n'
 
     # init kuma prior
-    kuma_prior = Kumaraswamy(torch.zeros(1, config['label_len']), torch.zeros(1, config['label_len']))
+    a0 = torch.zeros(1, config['label_len']).to(device)
+    b0 = torch.zeros(1, config['label_len']).to(device)
+    kuma_prior = Kumaraswamy(a0, b0)
 
     model.train()
     kumaMSD.train()
@@ -255,7 +258,7 @@ def train(config, vocab, dont_save):
 
         it_sup      = iter(train_loader_sup)
         it_unsup    = iter(train_loader_unsup)
-        done_sup    = True
+        done_sup    = False
         done_unsup  = False
         num_batches = 0
 
@@ -311,13 +314,15 @@ def train(config, vocab, dont_save):
 
             y_t_p, kuma_post          = kumaMSD(x_t)
 
+            # print(kuma_post.a)
+
             if choice == 'sup':
                 y_t = y_t.to(device)
                 y_t = torch.transpose(y_t, 0, 1)
                 y_t_pp = y_t
             else:
-                y_t_pp                = torch.stack([process_unsup_msd(batch) for batch in y_t_p])
-                y_t_pp                = y_t_pp.permute(1, 0, 2)
+                y_t_pp = torch.stack([process_unsup_msd(batch) for batch in y_t_p])
+                y_t_pp = y_t_pp.permute(1, 0, 2).to(device)
 
             x_t_p, mu, logvar = model(x_s, x_t, y_t_pp)
 
@@ -329,21 +334,17 @@ def train(config, vocab, dont_save):
 
             # ha bits , like free bits but over whole layer
             # REFERENCE: https://github.com/kastnerkyle/pytorch-text-vae
-            habits_lambda = config['lambda_m']
-            clamp_KLD     = torch.clamp(kl_term.mean(), min=habits_lambda).squeeze()
-            loss          = bce_loss + kl_weight * clamp_KLD
+            habits_lambda  = config['lambda_m']
+            clamp_KLD      = torch.clamp(kl_term.mean(), min=habits_lambda).squeeze()
+            loss           = bce_loss + kl_weight * clamp_KLD
 
-            # print("loss ----")
-            #
-            # print(loss)
-
-            # y_t_squashed  = torch.sum(y_t, dim=0).squeeze(0)
-            kuma_kl = loss_kuma(kuma_prior, kuma_post)
+            kuma_kl        = loss_kuma(kuma_prior, kuma_post, supervised=(choice == 'sup'))
             clamp_kuma_kld = torch.clamp(kuma_kl.mean(), min=habits_lambda).squeeze()
-            total_loss    = loss - clamp_kuma_kld
+            total_loss     = loss - clamp_kuma_kld
 
-            if choice == 'sup':
-                total_loss += torch.sum(kuma_post.log_prob(kuma_post.sample()))
+            # FIXME: This pushes the ai, bi values to Inf/NaN
+            # if choice == 'sup':
+            #     total_loss += torch.sum(kuma_post.log_prob(kuma_post.sample()))
 
             total_loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 10)
