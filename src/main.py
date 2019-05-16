@@ -19,6 +19,7 @@ from models import WordEncoder, Attention, TagEmbedding, WordDecoder, MSVED, Kum
 from dataset import MorphologyDatasetTask3, Vocabulary
 
 from kumaraswamy import Kumaraswamy
+from hard_kumaraswamy import StretchedAndRectifiedDistribution as HardKumaraswamy
 
 
 np.random.seed(0)
@@ -110,27 +111,27 @@ def kl_div(mu, logvar):
     return - 0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
 
 
-def loss_kuma(kuma_prior, kuma_post, supervised=False, loss_type=1):
+def loss_kuma(h_kuma_prior, h_kuma_post, supervised=False, y_t=None, loss_type=1):
     '''
     If supervised, computes the log probability.
     In the unsupervised case, computes the KL between the two Kuma distributions
     '''
 
     if loss_type == 2:
-        kl_div = -torch.distributions.kl.kl_divergence(kuma_post, kuma_prior)
-
-        loss = kl_div
+        kl_div = -torch.distributions.kl.kl_divergence(h_kuma_post, h_kuma_prior)
+        loss   = kl_div
 
         if supervised:
-            log_q_y = kuma_post.log_prob(kuma_post.sample())
-            loss -= log_q_y
+            y_t     = torch.sum(y_t, 0)
+            log_q_y = h_kuma_post.log_prob(y_t)
+            loss   += log_q_y
 
         return loss
 
     if supervised:
-        return kuma_prior.log_prob(kuma_prior.sample())
+        return h_kuma_prior.log_prob(h_kuma_prior.sample())
 
-    kl_div = -torch.distributions.kl.kl_divergence(kuma_post, kuma_prior)
+    kl_div = -torch.distributions.kl.kl_divergence(h_kuma_post, h_kuma_prior)
 
     return torch.sum(kl_div)
 
@@ -259,7 +260,8 @@ def train(config, vocab, dont_save):
     a0 = torch.tensor([[0.139] * config['label_len']]).to(device)
     b0 = torch.tensor([[0.286] * config['label_len']]).to(device)
 
-    kuma_prior = Kumaraswamy(a0, b0)
+    kuma_prior   = Kumaraswamy(a0, b0)
+    h_kuma_prior = HardKumaraswamy(kuma_prior)
 
     model.train()
     kumaMSD.train()
@@ -274,7 +276,6 @@ def train(config, vocab, dont_save):
         done_unsup  = False
         num_batches = 0
 
-        # for i_batch, sample_batched in enumerate(train_loader):
         while True:
             if done_sup and done_unsup:
                 break
@@ -300,8 +301,6 @@ def train(config, vocab, dont_save):
                     done_unsup = True
                     continue
 
-
-            # print("***********************************************************")
             optimizer.zero_grad()
 
             x_s = sample_batched['source_form'].to(device)
@@ -322,10 +321,11 @@ def train(config, vocab, dont_save):
 
                 return torch.tensor(output).to(device)
 
-            y_t_p, kuma_post          = kumaMSD(x_t)
+            y_t_p, h_kuma_post = kumaMSD(x_t)
 
-            # if choice == 'unsup':
-            #     print(kuma_post.a)
+            if choice == 'unsup':
+                print("*"*10)
+                print(h_kuma_post.sample())
 
             if choice == 'sup':
                 y_t = y_t.to(device)
@@ -349,9 +349,9 @@ def train(config, vocab, dont_save):
             clamp_KLD      = torch.clamp(kl_term.mean(), min=habits_lambda).squeeze()
             loss           = bce_loss + kl_weight * clamp_KLD
 
-            kuma_kl        = loss_kuma(kuma_prior, kuma_post, supervised=(choice == 'sup'), loss_type=2)
+            kuma_kl        = loss_kuma(h_kuma_prior, h_kuma_post, supervised=(choice == 'sup'), y_t=y_t, loss_type=2)
             clamp_kuma_kld = torch.clamp(kuma_kl.mean(), min=habits_lambda).squeeze()
-            total_loss     = loss - clamp_kuma_kld
+            total_loss     = loss - kuma_kl.mean()  #clamp_kuma_kld
 
             total_loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 10)
@@ -369,7 +369,6 @@ def train(config, vocab, dont_save):
             writer.add_scalar('kl_weight',  kl_weight)
             writer.add_scalar('Loss',       loss.detach().cpu().item())
             writer.add_scalar('Total Loss', total_loss.detach().cpu().item())
-            #writer.add_scalar('M_Loss',    m_loss.detach().cpu().item())
 
             kl_weight     = min(1.0, kl_weight + anneal_rate)
 

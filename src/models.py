@@ -209,32 +209,19 @@ class KumaMSD(nn.Module):
         self.support   = [-l, r]
 
         # TODO: initialization
-        # self.fc = nn.Linear(input_dim, h_dim)
-        self.ai = nn.Linear(input_dim, num_tags)
-        self.bi = nn.Linear(input_dim, num_tags)
+        self.fc = nn.Linear(input_dim, h_dim)
+        self.ai = nn.Linear(h_dim, num_tags)
+        self.bi = nn.Linear(h_dim, num_tags)
 
     def forward(self, x_t):
 
-        # print("-----")
         h, _, _ = self.encoder(x_t)
-        # logits  = F.relu(self.fc(h))
-
-        # print(logits)
-
-        ai      = F.softplus(self.ai(h))
-        bi      = F.softplus(self.bi(h))
+        logits  = F.relu(self.fc(h))
+        ai      = F.softplus(self.ai(logits))
+        bi      = F.softplus(self.bi(logits))
 
         kuma    = Kumaraswamy(ai, bi)
+        h_kuma  = HardKumaraswamy(kuma)
+        sample  = h_kuma.rsample()
 
-
-        # print(ai)
-
-        # print(bi)
-
-        sample  = HardKumaraswamy(kuma).rsample()
-
-        # print("****")
-        # print(kuma.a)
-        # print(kuma.b)
-
-        return sample, kuma
+        return sample, h_kuma

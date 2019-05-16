@@ -207,7 +207,7 @@ class MorphologyDatasetTask3(Dataset):
     def _prepare_msd_each_feature(self, msds):
         '''
         msds   -- ['pos=verb', 'tense=present', ...]
-        output -- [[0, 1, 0, 0, ....] length: |msd_seq_len|]
+        output -- [[0, 1, 0, 0, ....], [...]] length: |msd_seq_len| * |msd_seq_len|
         '''
         msd_seq_len = len(self.desc_2_idx)
         output      = []
