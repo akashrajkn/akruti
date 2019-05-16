@@ -256,8 +256,9 @@ def train(config, vocab, dont_save):
     epoch_details = 'epoch, bce_loss, kl_div, kl_weight, loss\n'
 
     # init kuma prior
-    a0 = torch.zeros(1, config['label_len']).to(device)
-    b0 = torch.zeros(1, config['label_len']).to(device)
+    a0 = torch.tensor([[0.139] * config['label_len']]).to(device)
+    b0 = torch.tensor([[0.286] * config['label_len']]).to(device)
+
     kuma_prior = Kumaraswamy(a0, b0)
 
     model.train()
@@ -300,7 +301,7 @@ def train(config, vocab, dont_save):
                     continue
 
 
-            print("***********************************************************")
+            # print("***********************************************************")
             optimizer.zero_grad()
 
             x_s = sample_batched['source_form'].to(device)
@@ -323,8 +324,8 @@ def train(config, vocab, dont_save):
 
             y_t_p, kuma_post          = kumaMSD(x_t)
 
-            if choice == 'unsup':
-                print(kuma_post.a)
+            # if choice == 'unsup':
+            #     print(kuma_post.a)
 
             if choice == 'sup':
                 y_t = y_t.to(device)
@@ -351,10 +352,6 @@ def train(config, vocab, dont_save):
             kuma_kl        = loss_kuma(kuma_prior, kuma_post, supervised=(choice == 'sup'), loss_type=2)
             clamp_kuma_kld = torch.clamp(kuma_kl.mean(), min=habits_lambda).squeeze()
             total_loss     = loss - clamp_kuma_kld
-
-            # FIXME: This pushes the ai, bi values to Inf/NaN
-            # if choice == 'sup':
-            #     total_loss += torch.sum(kuma_post.log_prob(kuma_post.sample()))
 
             total_loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 10)
