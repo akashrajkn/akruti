@@ -110,11 +110,22 @@ def kl_div(mu, logvar):
     return - 0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
 
 
-def loss_kuma(kuma_prior, kuma_post, supervised=False):
+def loss_kuma(kuma_prior, kuma_post, supervised=False, loss_type=1):
     '''
     If supervised, computes the log probability.
     In the unsupervised case, computes the KL between the two Kuma distributions
     '''
+
+    if loss_type == 2:
+        kl_div = -torch.distributions.kl.kl_divergence(kuma_post, kuma_prior)
+
+        loss = kl_div
+
+        if supervised:
+            log_q_y = kuma_post.log_prob(kuma_post.sample())
+            loss -= log_q_y
+
+        return loss
 
     if supervised:
         return kuma_prior.log_prob(kuma_prior.sample())
@@ -288,10 +299,8 @@ def train(config, vocab, dont_save):
                     done_unsup = True
                     continue
 
-            # print("CHOICE = {}".format(choice))
-            # print("****************")
 
-
+            print("***********************************************************")
             optimizer.zero_grad()
 
             x_s = sample_batched['source_form'].to(device)
@@ -314,7 +323,8 @@ def train(config, vocab, dont_save):
 
             y_t_p, kuma_post          = kumaMSD(x_t)
 
-            # print(kuma_post.a)
+            if choice == 'unsup':
+                print(kuma_post.a)
 
             if choice == 'sup':
                 y_t = y_t.to(device)
@@ -322,7 +332,7 @@ def train(config, vocab, dont_save):
                 y_t_pp = y_t
             else:
                 y_t_pp = torch.stack([process_unsup_msd(batch) for batch in y_t_p])
-                y_t_pp = y_t_pp.permute(1, 0, 2).to(device)
+                y_t_pp = y_t_pp.permute(1, 0, 2)
 
             x_t_p, mu, logvar = model(x_s, x_t, y_t_pp)
 
@@ -338,7 +348,7 @@ def train(config, vocab, dont_save):
             clamp_KLD      = torch.clamp(kl_term.mean(), min=habits_lambda).squeeze()
             loss           = bce_loss + kl_weight * clamp_KLD
 
-            kuma_kl        = loss_kuma(kuma_prior, kuma_post, supervised=(choice == 'sup'))
+            kuma_kl        = loss_kuma(kuma_prior, kuma_post, supervised=(choice == 'sup'), loss_type=2)
             clamp_kuma_kld = torch.clamp(kuma_kl.mean(), min=habits_lambda).squeeze()
             total_loss     = loss - clamp_kuma_kld
 
