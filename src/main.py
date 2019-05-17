@@ -323,9 +323,9 @@ def train(config, vocab, dont_save):
 
             y_t_p, h_kuma_post = kumaMSD(x_t)
 
-            if choice == 'unsup':
-                print("*"*10)
-                print(h_kuma_post.sample())
+            # if choice == 'unsup':
+            #     print("*"*10)
+            #     print(h_kuma_post.sample())
 
             if choice == 'sup':
                 y_t = y_t.to(device)
