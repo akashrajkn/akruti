@@ -130,6 +130,64 @@ def main(language, rewrite=False):
         print('Dictionaries already exist. Re-run')
 
 
+def process_task2_files(filepath):
+    with open(filepath, 'r', encoding='utf-8') as f:
+        source = f.read()
+
+    out       = []
+    sentences = source.strip().split('\n')
+
+    for sentence in sentences:
+        line    = sentence.strip().split('\t')
+        line    = line[1:4]
+        line[1] = '<UNLABELED>'
+        out.append('\t'.join(line))
+
+    with open(filepath.replace('task2', 'task2p'), 'w+') as f:
+        f.write('\n'.join(out))
+
+def process_task1_files(filepath):
+    with open(filepath, 'r', encoding='utf-8') as f:
+        source = f.read()
+
+    out       = []
+    sentences = source.strip().split('\n')
+
+    for sentence in sentences:
+        line    = sentence.strip().split('\t')
+        line[1] = '<UNLABELED>'
+        out.append('\t'.join(line))
+
+    with open(filepath.replace('task1', 'task1p'), 'w+') as f:
+        f.write('\n'.join(out))
+
+def modify_task2_files():
+
+    common_path = '../data/files/'
+
+    for lang in ['LANG', 'arabic', 'finnish', 'georgian', 'german', 'hungarian', 'maltese', 'navajo', 'russian', 'spanish', 'turkish']:
+
+        n_p = common_path + '{}-task2-'.format(lang)
+        for t in ['train', 'dev']:
+            filepath = n_p + t
+
+            if os.path.isfile(filepath):
+                process_task2_files(filepath)
+
+
+def modify_task1_files():
+
+    common_path = '../data/files/'
+
+    for lang in ['LANG', 'arabic', 'finnish', 'georgian', 'german', 'hungarian', 'maltese', 'navajo', 'russian', 'spanish', 'turkish']:
+
+        n_p = common_path + '{}-task1-'.format(lang)
+        for t in ['train', 'dev']:
+            filepath = n_p + t
+
+            if os.path.isfile(filepath):
+                process_task1_files(filepath)
+
 if __name__ == '__main__':
 
     parser   = argparse.ArgumentParser()
@@ -140,4 +198,6 @@ if __name__ == '__main__':
     rewrite  = args.rewrite
     language = args.language
 
-    main(language=language, rewrite=rewrite)
+    # main(language=language, rewrite=rewrite)
+    modify_task2_files()
+    modify_task1_files()

@@ -12,35 +12,119 @@ from torchvision import transforms, utils
 from helper import get_label_length
 
 
+class Vocabulary():
+    """Vocabulary"""
+    def __init__(self, language, path=None):
+
+        self.language   = language
+        self.char_2_idx = {}
+        self.idx_2_char = {}
+        self.vocab_size = 0
+
+        self.desc_2_idx = {}
+        self.idx_2_desc = {}
+        self.msd_size   = 0
+
+        for c in ['<SOS>', '<EOS>', '<PAD>', '<UNK>']:
+            self.char_2_idx[c]               = self.vocab_size
+            self.idx_2_char[self.vocab_size] = c
+            self.vocab_size                 += 1
+
+        self.desc_2_idx['<unkMSD>']    = self.msd_size
+        self.idx_2_desc[self.msd_size] = '<unkMSD>'
+        self.msd_size                 += 1
+
+        # Read files
+        common_path   = '../data/files/{}'.format(language)
+        tasks         = ['task1p', 'task2p', 'task3']
+        f_types       = ['dev', 'test', 'train']
+
+        for task in tasks:
+            for f_type in f_types:
+                filepath = common_path + '-{}-{}'.format(task, f_type)
+
+                if os.path.isfile(filepath):
+                    self._preprocess(filepath)
+
+    def _process_word(self, word):
+        for character in word:
+            if self.char_2_idx.get(character) is None:
+                self.char_2_idx[character]       = self.vocab_size
+                self.idx_2_char[self.vocab_size] = character
+                self.vocab_size                 += 1
+
+    def _process_msds(self, msd_line):
+
+        if msd_line == '<UNLABELED>':
+            return
+
+        msds = msd_line.strip().split(',')
+
+        for msd in msds:
+            if self.desc_2_idx.get(msd) is None:
+                self.desc_2_idx[msd]           = self.msd_size
+                self.idx_2_desc[self.msd_size] = msd
+                self.msd_size                 += 1
+
+    def _preprocess(self, filepath):
+        with open(filepath, 'r', encoding='utf-8') as f:
+            source = f.read()
+
+        out       = []
+        sentences = source.strip().split('\n')
+
+        for sentence in sentences:
+            line  = sentence.strip().split('\t')
+
+            if len(line) > 3:
+                print('Something wrong with line: {}'.format(sentence))
+                continue
+
+            self._process_word(line[0])
+            self._process_msds(line[1])
+            self._process_word(line[2])
+
+
 class MorphologyDatasetTask3(Dataset):
     """Morphology reinflection dataset."""
 
-    def __init__(self, csv_file, language, get_unprocessed=False, root_dir='../data/files', delimiter='\t'):
+    def __init__(self, test, language, vocab, tasks, get_unprocessed=False, delimiter='\t'):
         """
         Args:
-            csv_file (string) : Path to the csv file with annotations.
+            test (string)     : train or test
             language (string) : Language
-            root_dir (string) : Directory with all the data.
+            tasks (list)      : ['task1p', 'task2p']
         """
-        self.csv_file        = csv_file
+        self.test            = test
         self.language        = language
-        self.root_dir        = root_dir
+        self.tasks           = tasks
         self.get_unprocessed = get_unprocessed  # raw output
+        self.delimiter       = delimiter
 
-        self.pd_data     = pd.read_csv(csv_file, delimiter=delimiter, header=None)
+        self._get_pd_data()
         self.max_seq_len = self._max_sequence_length()
+
+        # Set Vocabulary
+        self.char_2_idx  = vocab.char_2_idx
+        self.idx_2_char  = vocab.idx_2_char
+        self.desc_2_idx  = vocab.desc_2_idx
+        self.idx_2_desc  = vocab.idx_2_desc
+        self.padding_idx = vocab.char_2_idx['<PAD>']
 
     def __len__(self):
         return len(self.pd_data)
 
     def __getitem__(self, idx):
 
-        msd = self.pd_data.iloc[idx, 1]
-        msds = msd.strip().split(',')
+        msd  = self.pd_data.iloc[idx, 1]
+        msds = '<UNLABELED>'
+
+        if msd != '<UNLABELED>':
+            msds = self._prepare_msd_each_feature(msd.strip().split(','))
 
         sample = {
             'source_form': self._prepare_sequence(self.pd_data.iloc[idx, 0]),
-            'msd'        : self._prepare_msd_each_feature(msds),
+            'msd'        : msds,
             'target_form': self._prepare_sequence(self.pd_data.iloc[idx, 2])
         }
 
@@ -51,21 +135,33 @@ class MorphologyDatasetTask3(Dataset):
 
         return sample
 
-    def set_vocabulary(self, char_2_idx, idx_2_char, desc_2_idx, idx_2_desc, msd_types):
-        # TODO: create a Vocabulary class later on
-        self.char_2_idx  = char_2_idx
-        self.idx_2_char  = idx_2_char
-        self.desc_2_idx  = desc_2_idx
-        self.idx_2_desc  = idx_2_desc
-        self.msd_types   = msd_types
-        self.padding_idx = char_2_idx['<PAD>']
-
-        if msd_types is not None:
-            self.label_len = get_label_length(idx_2_desc, msd_types) + 1  # last index is for None
-
-
     def get_vocab_size(self):
         return len(self.char_2_idx)
+
+    def _get_pd_data(self):
+        common_path   = '../data/files/{}'.format(self.language)
+
+        if self.test:
+            self.pd_data  = pd.read_csv(common_path + '-task3-test', delimiter=self.delimiter, header=None)
+            return
+
+        if self.tasks[0] == 'task3':
+            self.pd_data  = pd.read_csv(common_path + '-task3-train', delimiter=self.delimiter, header=None)
+            return
+
+        f_types       = ['dev', 'train']
+        frames        = []
+
+        for task in self.tasks:
+            for f_type in f_types:
+
+                filepath = common_path + '-{}-{}'.format(task, f_type)
+
+                if os.path.isfile(filepath):
+                    data = pd.read_csv(filepath, delimiter=self.delimiter, header=None)
+                    frames.append(data)
+
+        self.pd_data = pd.concat(frames)
 
     def _max_sequence_length(self):
         '''
@@ -97,7 +193,7 @@ class MorphologyDatasetTask3(Dataset):
             idx = self.char_2_idx.get(char)
 
             if idx is None:
-                idx = self.char_2_idx['<unk>']
+                idx = self.char_2_idx['<UNK>']
 
             output.append(idx)
 
@@ -111,23 +207,32 @@ class MorphologyDatasetTask3(Dataset):
     def _prepare_msd_each_feature(self, msds):
         '''
         msds   -- ['pos=verb', 'tense=present', ...]
-        output -- [[0, 1, 0, 0, ....] length: |msd_seq_len|]
+        output -- [[0, 1, 0, 0, ....], [...]] length: |msd_seq_len| * |msd_seq_len|
         '''
         msd_seq_len = len(self.desc_2_idx)
         output      = []
 
-        for m in msds:
+        for idx in self.idx_2_desc:
             one_hot = [0] * msd_seq_len
-            idx     = self.desc_2_idx.get(m)
 
-            if idx is None:
-                idx = self.desc_2_idx['<unkMSD>']
+            # NOTE, FIXME: This does not take into account <unkMSD>.
+            if self.idx_2_desc[idx] in msds:
+                one_hot[idx] = 1
 
-            one_hot[idx] = 1
             output.append(one_hot)
 
-        while len(output) < msd_seq_len:
-            output.append([0] * msd_seq_len)  # equivalent of giving padding_idx to nn.Embedding
+        # for m in msds:
+        #     one_hot = [0] * msd_seq_len
+        #     idx     = self.desc_2_idx.get(m)
+        #
+        #     if idx is None:
+        #         idx = self.desc_2_idx['<unkMSD>']
+        #
+        #     one_hot[idx] = 1
+        #     output.append(one_hot)
+        #
+        # while len(output) < msd_seq_len:
+        #     output.append([0] * msd_seq_len)  # equivalent of giving padding_idx to nn.Embedding
 
         return torch.tensor(output).type(torch.FloatTensor)
 
