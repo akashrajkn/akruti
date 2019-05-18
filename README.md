@@ -5,7 +5,7 @@
     </div> -->
     <div class="col">
       <h1 align="justify">
-        Shape of words
+        Semi-supervised Morphological Reinflection
       </h1>
     </div>
   </div>
