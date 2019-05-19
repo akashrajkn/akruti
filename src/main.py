@@ -352,7 +352,7 @@ def train(config, vocab, dont_save):
             total_loss     = loss - kuma_kl.mean()  #clamp_kuma_kld
 
             total_loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 10)
+            torch.nn.utils.clip_grad_norm_(list(model.parameters()) + list(kumaMSD.parameters()), 10)
             optimizer.step()
 
             num_batches   += 1
