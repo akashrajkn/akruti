@@ -157,10 +157,12 @@ def test(language, model_id, vocab, dont_save):
                                            vocab=vocab, batch_size=1, shuffle=False)
     idx_2_char     = d.idx_2_char
 
-    model, _       = initialize_model(config)
+    model, kumaMSD = initialize_model(config)
     model.load_state_dict(checkpoint['model_state_dict'])
+    kumaMSD.load_state_dict(checkpoint['kumaMSD_state_dict'])
 
     model.eval()
+    kumaMSD.eval()
     for i_batch, sample_batched in enumerate(test_loader):
 
         with torch.no_grad():
