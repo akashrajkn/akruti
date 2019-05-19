@@ -149,11 +149,14 @@ class MorphologyDatasetTask3(Dataset):
             self.pd_data  = pd.read_csv(common_path + '-task3-train', delimiter=self.delimiter, header=None)
             return
 
-        f_types       = ['dev', 'train']
+        f_types       = ['train', 'test', 'dev']
         frames        = []
 
         for task in self.tasks:
             for f_type in f_types:
+
+                if task == 'task1p' and f_type == 'dev':
+                    continue
 
                 filepath = common_path + '-{}-{}'.format(task, f_type)
 
