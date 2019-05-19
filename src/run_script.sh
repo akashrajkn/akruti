@@ -2,7 +2,7 @@
 
 MODELID = 1
 
-for VARIABLE in arabic
+for VARIABLE in arabic finnish georgian german hungarian maltese navajo russian spanish turkish
 do
     python preprocess.py -language=$VARIABLE --rewrite
 
