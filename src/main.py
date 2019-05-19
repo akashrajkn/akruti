@@ -230,7 +230,7 @@ def train(config, vocab, dont_save):
     m_loss_function = nn.MSELoss()
 
     kl_weight       = config['kl_start']
-    anneal_rate     = (1.0 - config['kl_start']) / (config['epochs'] * len(train_loader_sup))
+    anneal_rate     = (1.0 - config['kl_start']) / (config['epochs'] * (len(train_loader_sup) + len(train_loader_unsup)))
 
     config['anneal_rate'] = anneal_rate
 
@@ -257,8 +257,8 @@ def train(config, vocab, dont_save):
     epoch_details = 'epoch, bce_loss, kl_div, kl_weight, loss\n'
 
     # init kuma prior
-    a0 = torch.tensor([[0.139] * config['label_len']]).to(device)
-    b0 = torch.tensor([[0.286] * config['label_len']]).to(device)
+    a0 = torch.tensor([[config['a0']] * config['label_len']]).to(device)
+    b0 = torch.tensor([[config['b0']] * config['label_len']]).to(device)
 
     kuma_prior   = Kumaraswamy(a0, b0)
     h_kuma_prior = HardKumaraswamy(kuma_prior)
@@ -323,10 +323,6 @@ def train(config, vocab, dont_save):
 
             y_t_p, h_kuma_post = kumaMSD(x_t)
 
-            # if choice == 'unsup':
-            #     print("*"*10)
-            #     print(h_kuma_post.sample())
-
             if choice == 'sup':
                 y_t = y_t.to(device)
                 y_t = torch.transpose(y_t, 0, 1)
@@ -364,9 +360,9 @@ def train(config, vocab, dont_save):
                                                            clamp_KLD.detach().cpu().item(),
                                                            kl_weight,
                                                            loss.detach().cpu().item())
-            writer.add_scalar('BCE loss',   bce_loss.detach().cpu().item())
+            writer.add_scalar('BCE Loss',   bce_loss.detach().cpu().item())
             writer.add_scalar('KLD',        clamp_KLD.detach().cpu().item())
-            writer.add_scalar('kl_weight',  kl_weight)
+            writer.add_scalar('KL Weight',  kl_weight)
             writer.add_scalar('Loss',       loss.detach().cpu().item())
             writer.add_scalar('Total Loss', total_loss.detach().cpu().item())
 
@@ -384,6 +380,7 @@ def train(config, vocab, dont_save):
             {
                 'epoch'               : epoch,
                 'model_state_dict'    : model.state_dict(),
+                'kumaMSD_state_dict'  : kumaMSD.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'loss'                : epoch_loss / (num_batches + 1),
                 'config'              : config
@@ -394,6 +391,10 @@ def train(config, vocab, dont_save):
 
     with open('../models/{}-{}/epoch_details.csv'.format(config['language'], config['model_id']), 'w+') as f:
         f.write(epoch_details)
+
+
+def continue_training(model, config):
+    pass
 
 
 if __name__ == "__main__":
@@ -418,8 +419,8 @@ if __name__ == "__main__":
     parser.add_argument('-lambda_m',     action="store", type=float, default=0.2)
     parser.add_argument('-lr',           action="store", type=float, default=0.1)
     parser.add_argument('-kuma_msd',     action="store", type=int,   default=256)
-    parser.add_argument('-a0',           action="store", type=float, default=0.0)
-    parser.add_argument('-b0',           action="store", type=float, default=0.0)
+    parser.add_argument('-a0',           action="store", type=float, default=0.139)
+    parser.add_argument('-b0',           action="store", type=float, default=0.286)
 
     args                    = parser.parse_args()
     run_train               = args.train
