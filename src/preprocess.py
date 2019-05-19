@@ -168,7 +168,7 @@ def modify_task2_files():
     for lang in ['LANG', 'arabic', 'finnish', 'georgian', 'german', 'hungarian', 'maltese', 'navajo', 'russian', 'spanish', 'turkish']:
 
         n_p = common_path + '{}-task2-'.format(lang)
-        for t in ['train', 'dev']:
+        for t in ['train', 'dev', 'test']:
             filepath = n_p + t
 
             if os.path.isfile(filepath):
@@ -182,7 +182,7 @@ def modify_task1_files():
     for lang in ['LANG', 'arabic', 'finnish', 'georgian', 'german', 'hungarian', 'maltese', 'navajo', 'russian', 'spanish', 'turkish']:
 
         n_p = common_path + '{}-task1-'.format(lang)
-        for t in ['train', 'dev']:
+        for t in ['train', 'dev', 'test']:
             filepath = n_p + t
 
             if os.path.isfile(filepath):
