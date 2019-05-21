@@ -419,7 +419,7 @@ if __name__ == "__main__":
     parser.add_argument('-batch_size',   action="store", type=int,   default=64)
     parser.add_argument('-kl_start',     action="store", type=float, default=0.0)
     parser.add_argument('-lambda_m',     action="store", type=float, default=0.2)
-    parser.add_argument('-lr',           action="store", type=float, default=0.1)
+    parser.add_argument('-lr',           action="store", type=float, default=0.01)
     parser.add_argument('-kuma_msd',     action="store", type=int,   default=256)
     parser.add_argument('-a0',           action="store", type=float, default=0.139)
     parser.add_argument('-b0',           action="store", type=float, default=0.286)
