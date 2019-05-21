@@ -99,7 +99,7 @@ def initialize_dataloader(run_type, language, task, vocab, batch_size, shuffle):
         tasks = ['task1p', 'task2p']
 
     morph_data = MorphologyDatasetTask3(test=is_test, language=language, vocab=vocab, tasks=tasks, get_unprocessed=is_test)
-    dataloader = DataLoader(morph_data, batch_size=batch_size, shuffle=shuffle, num_workers=2)
+    dataloader = DataLoader(morph_data, batch_size=batch_size, shuffle=shuffle, num_workers=2, drop_last=(run_type == 'train'))
 
     return dataloader, morph_data
 
