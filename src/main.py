@@ -93,15 +93,25 @@ def initialize_dataloader(run_type, language, task, vocab, batch_size, shuffle):
     '''
     is_test    = (run_type == 'test')
 
+    max_seq_len = get_max_seq_len(language, vocab)
+
     if task == 'sup':
         tasks = ['task3']
     else:
         tasks = ['task1p', 'task2p']
 
-    morph_data = MorphologyDatasetTask3(test=is_test, language=language, vocab=vocab, tasks=tasks, get_unprocessed=is_test)
+    morph_data = MorphologyDatasetTask3(test=is_test, language=language, vocab=vocab, tasks=tasks, get_unprocessed=is_test, max_seq_len=max_seq_len)
     dataloader = DataLoader(morph_data, batch_size=batch_size, shuffle=shuffle, num_workers=2, drop_last=(run_type == 'train'))
 
     return dataloader, morph_data
+
+
+def get_max_seq_len(language, vocab):
+
+    tasks = ['task1p', 'task2p', 'task3']
+    morph_data = MorphologyDatasetTask3(test=False, language=language, vocab=vocab, tasks=tasks)
+
+    return morph_data.max_seq_len
 
 
 def kl_div(mu, logvar):

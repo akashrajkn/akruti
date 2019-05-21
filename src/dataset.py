@@ -88,7 +88,7 @@ class Vocabulary():
 class MorphologyDatasetTask3(Dataset):
     """Morphology reinflection dataset."""
 
-    def __init__(self, test, language, vocab, tasks, get_unprocessed=False, delimiter='\t', max_unsup=10000):
+    def __init__(self, test, language, vocab, tasks, get_unprocessed=False, delimiter='\t', max_unsup=10000, max_seq_len=None):
         """
         Args:
             test (string)     : train or test
@@ -103,7 +103,11 @@ class MorphologyDatasetTask3(Dataset):
         self.max_unsup       = max_unsup
 
         self._get_pd_data()
-        self.max_seq_len = self._max_sequence_length()
+
+        if max_seq_len is None:
+            self.max_seq_len = self._max_sequence_length()
+        else:
+            self.max_seq_len = max_seq_len
 
         # Set Vocabulary
         self.char_2_idx  = vocab.char_2_idx
