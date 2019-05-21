@@ -96,7 +96,7 @@ def initialize_dataloader(run_type, language, task, vocab, batch_size, shuffle):
     max_seq_len = get_max_seq_len(language, vocab)
 
     if task == 'sup':
-        tasks = ['task3']
+        tasks = ['task3p']
     else:
         tasks = ['task1p', 'task2p']
 
@@ -108,7 +108,7 @@ def initialize_dataloader(run_type, language, task, vocab, batch_size, shuffle):
 
 def get_max_seq_len(language, vocab):
 
-    tasks = ['task1p', 'task2p', 'task3']
+    tasks = ['task1p', 'task2p', 'task3p']
     morph_data = MorphologyDatasetTask3(test=False, language=language, vocab=vocab, tasks=tasks)
 
     return morph_data.max_seq_len

@@ -36,7 +36,7 @@ class Vocabulary():
 
         # Read files
         common_path   = '../data/files/{}'.format(language)
-        tasks         = ['task1p', 'task2p', 'task3']
+        tasks         = ['task1p', 'task2p', 'task3p']
         f_types       = ['dev', 'test', 'train']
 
         for task in tasks:
@@ -147,11 +147,11 @@ class MorphologyDatasetTask3(Dataset):
         common_path   = '../data/files/{}'.format(self.language)
 
         if self.test:
-            self.pd_data  = pd.read_csv(common_path + '-task3-test', delimiter=self.delimiter, header=None)
+            self.pd_data  = pd.read_csv(common_path + '-task3p-test', delimiter=self.delimiter, header=None)
             return
 
-        if self.tasks[0] == 'task3':
-            self.pd_data  = pd.read_csv(common_path + '-task3-train', delimiter=self.delimiter, header=None)
+        if self.tasks[0] == 'task3p':
+            self.pd_data  = pd.read_csv(common_path + '-task3p-train', delimiter=self.delimiter, header=None)
             return
 
         f_types       = ['train', 'test', 'dev']
