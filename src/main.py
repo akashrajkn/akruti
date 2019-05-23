@@ -185,6 +185,8 @@ def test(language, model_id, vocab, dont_save):
             y_t = torch.transpose(y_t, 0, 1)
 
             x_t_p, _, _ = model(x_s, x_t, y_t)
+            sample, _   = kumaMSD(x_t)
+
             x_t_p       = x_t_p[1:].view(-1, x_t_p.shape[-1])
 
             outputs     = F.log_softmax(x_t_p, dim=1).type(torch.LongTensor)
@@ -395,7 +397,8 @@ def train(config, vocab, dont_save):
                 'kumaMSD_state_dict'  : kumaMSD.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'loss'                : epoch_loss / (num_batches + 1),
-                'config'              : config
+                'config'              : config,
+                'vocab'               : vocab
             }, '../models/{}-{}/model.pt'.format(config['language'], config['model_id']))
 
     if dont_save:
