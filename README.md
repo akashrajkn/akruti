@@ -1,11 +1,11 @@
 <div class="container">
   <div class="row">
-<!--     <div class="col-sm">
+    <div class="col-sm">
       <img align="left" src="logo.png" height=90/>
-    </div> -->
+    </div>
     <div class="col">
       <h1 align="justify">
-        Shape of words
+        Semi-supervised labeled sequence transduction with differentiable discrete variables
       </h1>
     </div>
   </div>
