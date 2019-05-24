@@ -87,7 +87,7 @@ def initialize_model(config):
     return model, kumaMSD
 
 
-def initialize_dataloader(run_type, language, task, vocab, batch_size, shuffle):
+def initialize_dataloader(run_type, language, task, vocab, batch_size, shuffle, max_unsup=10000):
     '''
     Initializes train and test dataloaders
     '''
@@ -100,7 +100,8 @@ def initialize_dataloader(run_type, language, task, vocab, batch_size, shuffle):
     else:
         tasks = ['task1p', 'task2p']
 
-    morph_data = MorphologyDatasetTask3(test=is_test, language=language, vocab=vocab, tasks=tasks, get_unprocessed=is_test, max_seq_len=max_seq_len)
+    morph_data = MorphologyDatasetTask3(test=is_test, language=language, vocab=vocab, tasks=tasks, get_unprocessed=is_test,
+                                        max_unsup=max_unsup, max_seq_len=max_seq_len)
     dataloader = DataLoader(morph_data, batch_size=batch_size, shuffle=shuffle, num_workers=2, drop_last=(run_type == 'train'))
 
     return dataloader, morph_data
@@ -223,8 +224,10 @@ def train(config, vocab, dont_save):
     # Get train_dataloader
     train_loader_sup, morph_dat = initialize_dataloader(run_type='train', language=config['language'], task='sup',
                                                         vocab=vocab, batch_size=config['batch_size'], shuffle=True)
-    train_loader_unsup, _       = initialize_dataloader(run_type='train', language=config['language'], task='unsup',
-                                                        vocab=vocab, batch_size=config['batch_size'], shuffle=True)
+
+    if not config['only_sup']:
+        train_loader_unsup, _   = initialize_dataloader(run_type='train', language=config['language'], task='unsup',
+                                                        vocab=vocab, batch_size=config['batch_size'], shuffle=True, max_unsup=config['max_unsup'])
 
     config['vocab_size']    = morph_dat.get_vocab_size()
     config['padding_idx']   = morph_dat.padding_idx
@@ -238,20 +241,27 @@ def train(config, vocab, dont_save):
 
     # Model declaration
     model, kumaMSD  = initialize_model(config)
-    params          = list(model.parameters()) + list(kumaMSD.parameters())
-    optimizer       = optim.SGD(params,   lr=config['lr'])
+
+    if config['only_sup']:
+        params      = model.parameters()
+    else:
+        params      = list(model.parameters()) + list(kumaMSD.parameters())
+    optimizer       = optim.Adadelta(params,   lr=config['lr'], rho=config['rho'])
     loss_function   = nn.CrossEntropyLoss()
-    m_loss_function = nn.MSELoss()
 
     kl_weight       = config['kl_start']
-    anneal_rate     = (1.0 - config['kl_start']) / (config['epochs'] * (len(train_loader_sup) + len(train_loader_unsup)))
+
+    if config['only_sup']:
+        len_data    = len(train_loader_sup)
+    else:
+        len_data    = len(train_loader_sup) + len(train_loader_unsup)
+    anneal_rate     = (1.0 - config['kl_start']) / (config['epochs'] * (len_data))
 
     config['anneal_rate'] = anneal_rate
 
     print('-' * 13)
-    print('    DEVICE')
-    print('-' * 13)
-    print(device)
+    print('  DEVICE:   {}'.format(device))
+    print('  LANGUAGE: {}'.format(config['language']))
     print('-' * 13)
     print('    MODEL')
     print('-' * 13)
@@ -287,7 +297,7 @@ def train(config, vocab, dont_save):
         it_sup      = iter(train_loader_sup)
         it_unsup    = iter(train_loader_unsup)
         done_sup    = False
-        done_unsup  = False
+        done_unsup  = (False or config['only_sup'])
         num_batches = 0
 
         while True:
@@ -359,12 +369,18 @@ def train(config, vocab, dont_save):
             clamp_KLD      = torch.clamp(kl_term.mean(), min=habits_lambda).squeeze()
             loss           = bce_loss + kl_weight * clamp_KLD
 
-            kuma_kl        = loss_kuma(h_kuma_prior, h_kuma_post, supervised=(choice == 'sup'), y_t=y_t, loss_type=2)
-            clamp_kuma_kld = torch.clamp(kuma_kl.mean(), min=habits_lambda).squeeze()
-            total_loss     = loss - kuma_kl.mean()  #clamp_kuma_kld
+            total_loss     = loss
+
+            if not config['only_sup']:
+                kuma_kl        = loss_kuma(h_kuma_prior, h_kuma_post, supervised=(choice == 'sup'), y_t=y_t, loss_type=2)
+                clamp_kuma_kld = torch.clamp(kuma_kl.mean(), min=habits_lambda).squeeze()
+                total_loss     = total_loss - kuma_kl.mean()
 
             total_loss.backward()
-            torch.nn.utils.clip_grad_norm_(list(model.parameters()) + list(kumaMSD.parameters()), 10)
+            if config['only_sup']:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 10)
+            else:
+                torch.nn.utils.clip_grad_norm_(list(model.parameters()) + list(kumaMSD.parameters()), 10)
             optimizer.step()
 
             num_batches   += 1
@@ -373,7 +389,7 @@ def train(config, vocab, dont_save):
                                                            bce_loss.detach().cpu().item(),
                                                            clamp_KLD.detach().cpu().item(),
                                                            kl_weight,
-                                                           loss.detach().cpu().item())
+                                                           total_loss.detach().cpu().item())
             writer.add_scalar('BCE Loss',   bce_loss.detach().cpu().item())
             writer.add_scalar('KLD',        clamp_KLD.detach().cpu().item())
             writer.add_scalar('KL Weight',  kl_weight)
@@ -432,10 +448,13 @@ if __name__ == "__main__":
     parser.add_argument('-batch_size',   action="store", type=int,   default=64)
     parser.add_argument('-kl_start',     action="store", type=float, default=0.0)
     parser.add_argument('-lambda_m',     action="store", type=float, default=0.2)
-    parser.add_argument('-lr',           action="store", type=float, default=0.01)
+    parser.add_argument('-lr',           action="store", type=float, default=0.1)
     parser.add_argument('-kuma_msd',     action="store", type=int,   default=256)
     parser.add_argument('-a0',           action="store", type=float, default=0.139)
     parser.add_argument('-b0',           action="store", type=float, default=0.286)
+    parser.add_argument('-rho',          action="store", type=float, default=0.95)
+    parser.add_argument('-max_unsup',    action="store", type=int,   default=10000)
+    parser.add_argument('--only_sup',    action="store_true")
 
     args                    = parser.parse_args()
     run_train               = args.train
@@ -461,6 +480,9 @@ if __name__ == "__main__":
     config['msd_h_dim']     = args.kuma_msd
     config['a0']            = args.a0
     config['b0']            = args.b0
+    config['rho']           = args.rho
+    config['max_unsup']     = args.max_unsup
+    config['only_sup']      = args.only_sup
 
     vocab                   = Vocabulary(language=config['language'])
 
