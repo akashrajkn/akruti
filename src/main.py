@@ -291,14 +291,18 @@ def train(config, vocab, dont_save):
     kumaMSD.train()
     for epoch in range(config['epochs']):
 
-        start      = timer()
-        epoch_loss = 0
-
-        it_sup      = iter(train_loader_sup)
-        it_unsup    = iter(train_loader_unsup)
-        done_sup    = False
-        done_unsup  = (False or config['only_sup'])
+        start       = timer()
+        epoch_loss  = 0
         num_batches = 0
+
+        it_sup         = iter(train_loader_sup)
+        if not config['only_sup']:
+            it_unsup   = iter(train_loader_unsup)
+            done_unsup = False
+        else:
+            done_unsup = True
+
+        done_sup       = False
 
         while True:
             if done_sup and done_unsup:
