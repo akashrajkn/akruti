@@ -217,8 +217,13 @@ class KumaMSD(nn.Module):
 
         h, _, _ = self.encoder(x_t)
         logits  = F.relu(self.fc(h))
-        ai      = F.softplus(self.ai(logits))
-        bi      = F.softplus(self.bi(logits))
+
+        # ai      = F.softplus(self.ai(logits))
+        # bi      = F.softplus(self.bi(logits))
+
+        # Constrained Kuma
+        ai      = 0.1 + torch.sigmoid(self.ai(logits))     * 0.8
+        bi      = 1   + torch.sigmoid(self.bi(logits) - 5) * 5
 
         kuma    = Kumaraswamy(ai, bi)
         h_kuma  = HardKumaraswamy(kuma)
