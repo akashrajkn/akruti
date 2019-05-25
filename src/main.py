@@ -313,7 +313,7 @@ def train(config, vocab, dont_save):
             elif done_unsup:
                 choice = 'sup'
             else:
-                choice = random.choice(['sup', 'unsup'])
+                choice = random.choice(['sup', 'sup', 'sup', 'sup', 'unsup'])
 
             if choice == 'sup':
                 try:
