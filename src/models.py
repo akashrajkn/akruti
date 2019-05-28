@@ -225,7 +225,7 @@ class KumaMSD(nn.Module):
         ai      = 0.1 + torch.sigmoid(self.ai(logits))     * 0.8
         bi      = 1   + torch.sigmoid(self.bi(logits) - 5) * 5
 
-        kuma    = Kumaraswamy(ai, bi)
+        kuma    = Kumaraswamy(ai / bi, (1 - ai) / bi)
         h_kuma  = HardKumaraswamy(kuma)
         sample  = h_kuma.rsample()
 
