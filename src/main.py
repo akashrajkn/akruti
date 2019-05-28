@@ -248,6 +248,7 @@ def train(config, vocab, dont_save):
         params      = list(model.parameters()) + list(kumaMSD.parameters())
     optimizer       = optim.Adadelta(params,   lr=config['lr'], rho=config['rho'])
     loss_function   = nn.CrossEntropyLoss()
+    loss_func_sup   = nn.BCEWithLogitsLoss()
 
     kl_weight       = config['kl_start']
 
@@ -374,6 +375,9 @@ def train(config, vocab, dont_save):
             loss           = bce_loss + kl_weight * clamp_KLD
 
             total_loss     = loss
+
+            if choice == 'sup':
+                total_loss += loss_func_sup(y_t_p, torch.sum(y_t, dim=0))
 
             if not config['only_sup']:
                 kuma_kl        = loss_kuma(h_kuma_prior, h_kuma_post, supervised=(choice == 'sup'), y_t=y_t, loss_type=2)
