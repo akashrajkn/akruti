@@ -248,7 +248,7 @@ def train(config, vocab, dont_save):
         params      = list(model.parameters()) + list(kumaMSD.parameters())
     optimizer       = optim.Adadelta(params,   lr=config['lr'], rho=config['rho'])
     loss_function   = nn.CrossEntropyLoss()
-    loss_func_sup   = nn.BCEWithLogitsLoss()
+    loss_func_sup   = nn.BCELoss()
 
     kl_weight       = config['kl_start']
 
