@@ -36,7 +36,7 @@ class Vocabulary():
 
         # Read files
         common_path   = '../data/files/{}'.format(language)
-        tasks         = ['task1p', 'task2p', 'task3']
+        tasks         = ['task1p', 'task2p', 'task3p']
         f_types       = ['dev', 'test', 'train']
 
         for task in tasks:
@@ -88,7 +88,7 @@ class Vocabulary():
 class MorphologyDatasetTask3(Dataset):
     """Morphology reinflection dataset."""
 
-    def __init__(self, test, language, vocab, tasks, get_unprocessed=False, delimiter='\t'):
+    def __init__(self, test, language, vocab, tasks, get_unprocessed=False, delimiter='\t', max_unsup=10000, max_seq_len=None):
         """
         Args:
             test (string)     : train or test
@@ -100,9 +100,14 @@ class MorphologyDatasetTask3(Dataset):
         self.tasks           = tasks
         self.get_unprocessed = get_unprocessed  # raw output
         self.delimiter       = delimiter
+        self.max_unsup       = max_unsup
 
         self._get_pd_data()
-        self.max_seq_len = self._max_sequence_length()
+
+        if max_seq_len is None:
+            self.max_seq_len = self._max_sequence_length()
+        else:
+            self.max_seq_len = max_seq_len
 
         # Set Vocabulary
         self.char_2_idx  = vocab.char_2_idx
@@ -142,18 +147,21 @@ class MorphologyDatasetTask3(Dataset):
         common_path   = '../data/files/{}'.format(self.language)
 
         if self.test:
-            self.pd_data  = pd.read_csv(common_path + '-task3-test', delimiter=self.delimiter, header=None)
+            self.pd_data  = pd.read_csv(common_path + '-task3p-test', delimiter=self.delimiter, header=None)
             return
 
-        if self.tasks[0] == 'task3':
-            self.pd_data  = pd.read_csv(common_path + '-task3-train', delimiter=self.delimiter, header=None)
+        if self.tasks[0] == 'task3p':
+            self.pd_data  = pd.read_csv(common_path + '-task3p-train', delimiter=self.delimiter, header=None)
             return
 
-        f_types       = ['dev', 'train']
+        f_types       = ['train', 'test', 'dev']
         frames        = []
 
         for task in self.tasks:
             for f_type in f_types:
+
+                if task == 'task1p' and f_type == 'dev':
+                    continue
 
                 filepath = common_path + '-{}-{}'.format(task, f_type)
 
@@ -162,6 +170,7 @@ class MorphologyDatasetTask3(Dataset):
                     frames.append(data)
 
         self.pd_data = pd.concat(frames)
+        self.pd_data = self.pd_data.head(self.max_unsup)
 
     def _max_sequence_length(self):
         '''

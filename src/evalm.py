@@ -8,6 +8,7 @@ Author: Ryan Cotterell and Mans Hulden
 Last Update: 12/01/2015
 """
 
+import os
 import argparse
 import sys
 import numpy as np
@@ -111,6 +112,21 @@ def pp(A, L, NL, R):
     print("Mean Reciprocal Rank        :", R)
 
 
+def test_evaluate(language, model_id):
+    golden  = read_file('../data/files/{}-task3-test'.format(args.language))
+    guesses = read_file('../results/{}-{}-guesses'.format(args.language, args.model_id))
+
+    A, L, NL, R, breakdown, breakdown_N = aggregate(golden, guesses)
+
+    with open('../results/aggregate_accuracies.csv', 'a') as f:
+        f.write('{}, {}, {}, {}, {}, {}\n'.format(language, model_id, A, L, NL, R))
+
+    print('-' * 50)
+    print("Aggregate")
+    pp(A, L, NL, R)
+    print('-' * 50)
+
+
 if __name__ == "__main__":
 
     parser  = argparse.ArgumentParser(description='SIGMORPHON 2016 Shared Task Evaluation')
@@ -123,6 +139,7 @@ if __name__ == "__main__":
 
     A, L, NL, R, breakdown, breakdown_N = aggregate(golden, guesses)
 
+
     for tag, (_A, _L, _NL, _R) in breakdown.items():
         print('-' * 50)
         print(tag)
@@ -134,3 +151,6 @@ if __name__ == "__main__":
     print("Aggregate")
     pp(A, L, NL, R)
     print('-' * 50)
+
+    with open('../results/aggregate_accuracies.csv', 'a') as f:
+        f.write('{}, {}, {}, {}, {}, {}\n'.format(args.language, args.model_id, A, L, NL, R))
