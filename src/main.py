@@ -123,31 +123,6 @@ def kl_div_sup(mu, logvar):
     return - 0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
 
 
-def loss_kuma(h_kuma_prior, h_kuma_post, supervised=False, y_t=None, loss_type=1):
-    '''
-    If supervised, computes the log probability.
-    In the unsupervised case, computes the KL between the two Kuma distributions
-    '''
-
-    if loss_type == 2:
-        kl_div = -torch.distributions.kl.kl_divergence(h_kuma_post, h_kuma_prior)
-        loss   = kl_div
-
-        if supervised:
-            y_t     = torch.sum(y_t, 0)
-            log_q_y = h_kuma_post.log_prob(y_t)
-            loss   += log_q_y
-
-        return loss
-
-    if supervised:
-        return h_kuma_prior.log_prob(h_kuma_prior.sample())
-
-    kl_div = -torch.distributions.kl.kl_divergence(h_kuma_post, h_kuma_prior)
-
-    return torch.sum(kl_div)
-
-
 def test(language, model_id, dont_save):
     '''
     Test function
@@ -262,7 +237,7 @@ def train(config, vocab, dont_save):
         params      = list(model.parameters()) + list(kumaMSD.parameters())
     optimizer       = optim.Adadelta(params,   lr=config['lr'], rho=config['rho'])
     ce_loss_func    = nn.CrossEntropyLoss(ignore_index=config['padding_idx'])
-    loss_func_sup   = nn.BCELoss()
+    loss_func_sup   = nn.BCELoss(reduction='sum')
 
     kl_weight       = config['kl_start']
 
@@ -350,14 +325,18 @@ def train(config, vocab, dont_save):
                 x_s_sup   = sample_batched_sup['source_form'].to(device)
                 x_t_sup   = sample_batched_sup['target_form'].to(device)
                 y_t_sup   = sample_batched_sup['msd'].to(device)
-                x_s_unsup = sample_batched_unsup['source_form'].to(device)
-                x_t_unsup = sample_batched_unsup['target_form'].to(device)
+
+                if not config['only_sup']:
+                    x_s_unsup = sample_batched_unsup['source_form'].to(device)
+                    x_t_unsup = sample_batched_unsup['target_form'].to(device)
 
                 x_s_sup   = torch.transpose(x_s_sup,   0, 1)
                 x_t_sup   = torch.transpose(x_t_sup,   0, 1)
                 y_t_sup   = torch.transpose(y_t_sup,   0, 1)
-                x_s_unsup = torch.transpose(x_s_unsup, 0, 1)
-                x_t_unsup = torch.transpose(x_t_unsup, 0, 1)
+
+                if not config['only_sup']:
+                    x_s_unsup = torch.transpose(x_s_unsup, 0, 1)
+                    x_t_unsup = torch.transpose(x_t_unsup, 0, 1)
 
                 optimizer.zero_grad()
 
@@ -381,21 +360,24 @@ def train(config, vocab, dont_save):
                 loss_sup      = ce_loss_sup + kl_sup * clamp_kl_sup + kl_kuma_sup + yt_loss_sup
 
                 ############ UNSUPERVISED PIPIELINE ############
-                y_t_p_unsup, h_kuma_post_unsup      = kumaMSD(x_t_unsup)
-                y_t_unsup                           = torch.stack([process_unsup_msd(batch, device) for batch in y_t_p_unsup])
-                y_t_unsup                           = y_t_unsup.permute(1, 0, 2)
-                x_t_p_unsup, mu_unsup, logvar_unsup = model(x_s_unsup, x_t_unsup, y_t_unsup)
+                loss_unsup = torch.zeros(1)
 
-                x_t_p_unsup = x_t_p_unsup[1:].view(-1, x_t_p_unsup.shape[-1])
-                x_t_a_unsup = x_t_unsup[1:].contiguous().view(-1)
+                if not config['only_sup']:
+                    y_t_p_unsup, h_kuma_post_unsup      = kumaMSD(x_t_unsup)
+                    y_t_unsup                           = torch.stack([process_unsup_msd(batch, device) for batch in y_t_p_unsup])
+                    y_t_unsup                           = y_t_unsup.permute(1, 0, 2)
+                    x_t_p_unsup, mu_unsup, logvar_unsup = model(x_s_unsup, x_t_unsup, y_t_unsup)
 
-                # Compute unsupervised loss
-                ce_loss_unsup  = ce_loss_func(x_t_p_unsup, x_t_a_unsup)
-                kl_unsup       = kl_div_sup(mu_unsup, logvar_unsup)
-                kl_kuma_unsup  = torch.sum(torch.distributions.kl.kl_divergence(h_kuma_post_unsup, h_kuma_prior))
+                    x_t_p_unsup = x_t_p_unsup[1:].view(-1, x_t_p_unsup.shape[-1])
+                    x_t_a_unsup = x_t_unsup[1:].contiguous().view(-1)
 
-                clamp_kl_unsup = torch.clamp(kl_unsup.mean(), min=habits_lambda).squeeze()
-                loss_unsup     = ce_loss_unsup + kl_unsup * clamp_kl_unsup + kl_kuma_unsup
+                    # Compute unsupervised loss
+                    ce_loss_unsup  = ce_loss_func(x_t_p_unsup, x_t_a_unsup)
+                    kl_unsup       = kl_div_sup(mu_unsup, logvar_unsup)
+                    kl_kuma_unsup  = torch.sum(torch.distributions.kl.kl_divergence(h_kuma_post_unsup, h_kuma_prior))
+
+                    clamp_kl_unsup = torch.clamp(kl_unsup.mean(), min=habits_lambda).squeeze()
+                    loss_unsup     = ce_loss_unsup + kl_unsup * clamp_kl_unsup + kl_kuma_unsup
 
                 total_loss     = loss_sup + config['dt_unsup'] * loss_unsup
                 total_loss.backward()
