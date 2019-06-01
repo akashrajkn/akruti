@@ -71,7 +71,8 @@ def initialize_model(config):
                                 dec_h_dim   =config['dec_h_dim'],
                                 dropout     =config['dec_dropout'],
                                 padding_idx =config['padding_idx'],
-                                device      =device)
+                                device      =device,
+                                no_attn     =config['no_attn'])
 
     model         = MSVED(encoder           =encoder,
                           tag_embedding     =tag_embedding,
@@ -326,15 +327,14 @@ def train(config, vocab, dont_save):
                 x_t_sup   = sample_batched_sup['target_form'].to(device)
                 y_t_sup   = sample_batched_sup['msd'].to(device)
 
+                x_s_sup   = torch.transpose(x_s_sup, 0, 1)
+                x_t_sup   = torch.transpose(x_t_sup, 0, 1)
+                y_t_sup   = torch.transpose(y_t_sup, 0, 1)
+
                 if not config['only_sup']:
                     x_s_unsup = sample_batched_unsup['source_form'].to(device)
                     x_t_unsup = sample_batched_unsup['target_form'].to(device)
 
-                x_s_sup   = torch.transpose(x_s_sup,   0, 1)
-                x_t_sup   = torch.transpose(x_t_sup,   0, 1)
-                y_t_sup   = torch.transpose(y_t_sup,   0, 1)
-
-                if not config['only_sup']:
                     x_s_unsup = torch.transpose(x_s_unsup, 0, 1)
                     x_t_unsup = torch.transpose(x_t_unsup, 0, 1)
 
@@ -360,7 +360,11 @@ def train(config, vocab, dont_save):
                 loss_sup      = ce_loss_sup + kl_sup * clamp_kl_sup + kl_kuma_sup + yt_loss_sup
 
                 ############ UNSUPERVISED PIPIELINE ############
-                loss_unsup = torch.zeros(1)
+                loss_unsup     = torch.zeros(1).to(device)
+                ce_loss_unsup  = torch.zeros(1).to(device)
+                kl_unsup       = torch.zeros(1).to(device)
+                clamp_kl_unsup = torch.zeros(1).to(device)
+                kl_kuma_unsup  = torch.zeros(1).to(device)
 
                 if not config['only_sup']:
                     y_t_p_unsup, h_kuma_post_unsup      = kumaMSD(x_t_unsup)
@@ -437,9 +441,11 @@ def continue_training(model, config):
 if __name__ == "__main__":
 
     parser                  = argparse.ArgumentParser()
-    parser.add_argument('--train',       action='store_true')
-    parser.add_argument('--test',        action='store_true')
-    parser.add_argument('--dont_save',   action='store_true',        default=False)
+    parser.add_argument('--train',       action="store_true")
+    parser.add_argument('--test',        action="store_true")
+    parser.add_argument('--only_sup',    action="store_true")
+    parser.add_argument('--no_attn',     action="store_true",        default=False)
+    parser.add_argument('--dont_save',   action="store_true",        default=False)
     parser.add_argument('-model_id',     action="store", type=int)
     parser.add_argument('-language',     action="store", type=str)
     parser.add_argument('-device',       action="store", type=str,   default='cuda')
@@ -462,7 +468,6 @@ if __name__ == "__main__":
     parser.add_argument('-max_unsup',    action="store", type=int,   default=10000)
     parser.add_argument('-dt_unsup',     action="store", type=float, default=0.7)
     parser.add_argument('-num_workers',  action="store", type=int,   default=2)
-    parser.add_argument('--only_sup',    action="store_true")
 
     args                    = parser.parse_args()
     run_train               = args.train
@@ -493,6 +498,7 @@ if __name__ == "__main__":
     config['only_sup']      = args.only_sup
     config['dt_unsup']      = args.dt_unsup
     config['num_workers']   = args.num_workers
+    config['no_attn']       = args.no_attn
 
     # TRAIN
     if run_train:

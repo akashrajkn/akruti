@@ -106,7 +106,7 @@ class Attention(nn.Module):
 
 class WordDecoder(nn.Module):
     def __init__(self, attention, output_dim, char_emb_dim=300, z_dim=150, tag_emb_dim=200,
-                 dec_h_dim=512, dropout=0.4, padding_idx=None, device=None):
+                 dec_h_dim=512, dropout=0.4, padding_idx=None, device=None, no_attn=False):
         '''
         output_dim -- vocabulary size
         '''
@@ -119,6 +119,7 @@ class WordDecoder(nn.Module):
         self.output_dim   = output_dim
         self.attention    = attention
         self.device       = device
+        self.no_attn      = no_attn
 
         self.embedding    = nn.Embedding(output_dim, char_emb_dim)
         self.rnn          = nn.GRU(char_emb_dim + tag_emb_dim + z_dim, dec_h_dim)
@@ -135,10 +136,13 @@ class WordDecoder(nn.Module):
         input    = input.type(torch.LongTensor).to(self.device)
         input    = input.unsqueeze(0)
         embedded = self.dropout(self.embedding(input))
+        z        = z.unsqueeze(0)  # For tensor dimension compatibility - see rnn_input
 
-        a = self.attention(hidden, tag_embeds)
-        a = a.unsqueeze(1)
-        z = z.unsqueeze(0)  # For tensor dimension compatibility - see rnn_input
+        if self.no_attn:
+            a = torch.ones((tag_embeds.size(0), 1, tag_embeds.size(1))).to(self.device)
+        else:
+            a = self.attention(hidden, tag_embeds)
+            a = a.unsqueeze(1)
 
         weighted       = torch.bmm(a, tag_embeds)
         weighted       = weighted.permute(1, 0, 2)
@@ -207,6 +211,9 @@ class KumaMSD(nn.Module):
         self.num_tags  = num_tags
         self.encoder   = encoder
         self.support   = [-l, r]
+        # Learned kuma params
+        self.a         = 0.
+        self.b         = 0.
 
         # TODO: initialization
         self.fc = nn.Linear(input_dim, h_dim)
@@ -224,6 +231,9 @@ class KumaMSD(nn.Module):
         # Constrained Kuma
         ai      = 0.1 + torch.sigmoid(self.ai(logits))     * 0.8
         bi      = 1   + torch.sigmoid(self.bi(logits) - 5) * 5
+
+        self.a  = ai
+        self.b  = bi
 
         kuma    = Kumaraswamy(ai / bi, (1 - ai) / bi)
         h_kuma  = HardKumaraswamy(kuma)
