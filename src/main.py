@@ -30,10 +30,6 @@ torch.manual_seed(0)
 def initialize_model(config):
     '''
     Initialize and return the models
-    Args:
-        config -- config dict
-    Return:
-        model
     '''
     if not torch.cuda.is_available():
         device    = torch.device('cpu')
@@ -92,18 +88,17 @@ def initialize_dataloader(run_type, language, task, vocab, batch_size, shuffle, 
     '''
     Initializes train and test dataloaders
     '''
-    is_test    = (run_type == 'test')
-
+    is_test     = (run_type == 'test')
     max_seq_len = get_max_seq_len(language, vocab)
 
-    if task == 'sup':
-        tasks = ['task3p']
+    if    task == 'sup':
+        tasks   = ['task3p']
     else:
-        tasks = ['task1p', 'task2p']
+        tasks   = ['task1p', 'task2p']
 
-    morph_data = MorphologyDatasetTask3(test=is_test, language=language, vocab=vocab, tasks=tasks, get_unprocessed=is_test,
+    morph_data  = MorphologyDatasetTask3(test=is_test, language=language, vocab=vocab, tasks=tasks, get_unprocessed=is_test,
                                         max_unsup=max_unsup, max_seq_len=max_seq_len)
-    dataloader = DataLoader(morph_data, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers, drop_last=(run_type == 'train'))
+    dataloader  = DataLoader(morph_data, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers, drop_last=(run_type == 'train'))
 
     return dataloader, morph_data
 
@@ -116,36 +111,11 @@ def get_max_seq_len(language, vocab):
     return morph_data.max_seq_len
 
 
-def kl_div_sup(mu, logvar):
+def kl_div_latent(mu, logvar):
     '''
     Compute KL divergence between N(mu, logvar) and N(0, 1)
     '''
     return - 0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-
-
-def loss_kuma(h_kuma_prior, h_kuma_post, supervised=False, y_t=None, loss_type=1):
-    '''
-    If supervised, computes the log probability.
-    In the unsupervised case, computes the KL between the two Kuma distributions
-    '''
-
-    if loss_type == 2:
-        kl_div = -torch.distributions.kl.kl_divergence(h_kuma_post, h_kuma_prior)
-        loss   = kl_div
-
-        if supervised:
-            y_t     = torch.sum(y_t, 0)
-            log_q_y = h_kuma_post.log_prob(y_t)
-            loss   += log_q_y
-
-        return loss
-
-    if supervised:
-        return h_kuma_prior.log_prob(h_kuma_prior.sample())
-
-    kl_div = -torch.distributions.kl.kl_divergence(h_kuma_post, h_kuma_prior)
-
-    return torch.sum(kl_div)
 
 
 def test(language, model_id, dont_save):
@@ -186,6 +156,17 @@ def test(language, model_id, dont_save):
             x_s = torch.transpose(x_s, 0, 1)
             x_t = torch.transpose(x_t, 0, 1)
             y_t = torch.transpose(y_t, 0, 1)
+
+            # ### Beam search
+            # h, mu, _   = model.encoder(x_s)
+            # outputs    = torch.zeros(model.max_len, 1, model.vocab_size).to(device)
+            # tag_embeds = model.tag_embedding(y_t)
+            # o          = x_t[0, :]  # Start tokens
+            # hypotheses = []  # top 8
+            #
+            # for step in range(1, model.max_len):
+            #     o, h      = model.decoder(o, h, tag_embeds, mu)
+            #     top8, ids = torch.topk(o, 8)
 
             x_t_p, _, _ = model(x_s, x_t, y_t)
             sample, _   = kumaMSD(x_t)
@@ -370,7 +351,7 @@ def train(config, vocab, dont_save):
 
                 # Compute supervised loss
                 ce_loss_sup = ce_loss_func(x_t_p_sup, x_t_a_sup)
-                kl_sup      = kl_div_sup(mu_sup, logvar_sup)
+                kl_sup      = kl_div_latent(mu_sup, logvar_sup)
                 kl_kuma_sup = torch.sum(torch.distributions.kl.kl_divergence(h_kuma_post_sup, h_kuma_prior))
                 yt_loss_sup = loss_func_sup(y_t_p_sup, torch.sum(y_t_sup, dim=0))
 
@@ -391,7 +372,7 @@ def train(config, vocab, dont_save):
 
                 # Compute unsupervised loss
                 ce_loss_unsup  = ce_loss_func(x_t_p_unsup, x_t_a_unsup)
-                kl_unsup       = kl_div_sup(mu_unsup, logvar_unsup)
+                kl_unsup       = kl_div_latent(mu_unsup, logvar_unsup)
                 kl_kuma_unsup  = torch.sum(torch.distributions.kl.kl_divergence(h_kuma_post_unsup, h_kuma_prior))
 
                 clamp_kl_unsup = torch.clamp(kl_unsup.mean(), min=habits_lambda).squeeze()
