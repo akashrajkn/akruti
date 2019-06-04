@@ -269,7 +269,7 @@ def train(config, vocab, dont_save):
             print("Directory/Model already exists")
             return
 
-    epoch_details  = 'epoch, ce_loss_sup, kl_sup, clamp_kl_sup, kl_kuma_sup, yt_loss_sup, '
+    epoch_details  = 'epoch, ce_loss_sup, kl_sup, clamp_kl_sup, kuma_loss_sup, yt_loss_sup, '
     epoch_details +=        'ce_loss_unsup, kl_unsup, clamp_kl_unsup, kl_kuma_unsup, kl_kuma_unsup, '
     epoch_details += 'loss_sup, loss_unsup, total_loss\n'
 
@@ -351,14 +351,15 @@ def train(config, vocab, dont_save):
                 ce_loss_sup   = ce_loss_func(x_t_p_sup, x_t_a_sup)
                 kl_sup        = kl_div_sup(mu_sup, logvar_sup)
                 # kuma_loss_sup = torch.sum(torch.distributions.kl.kl_divergence(h_kuma_post_sup, h_kuma_prior))
-                kuma_loss_sup = h_kuma_prior.log_prob(torch.sum(y_t_sup, dim=0))
+                kuma_loss_sup = torch.sum(h_kuma_prior.log_prob(torch.sum(y_t_sup, dim=0)))
                 # yt_loss_sup = loss_func_sup(y_t_p_sup, torch.sum(y_t_sup, dim=0))
+                yt_loss_sup   = torch.zeros(1)
 
                 # ha bits, like free bits but over whole layer
                 # REFERENCE: https://github.com/kastnerkyle/pytorch-text-vae
                 habits_lambda = config['lambda_m']
                 clamp_kl_sup  = torch.clamp(kl_sup.mean(), min=habits_lambda).squeeze()
-                loss_sup      = ce_loss_sup + kl_sup * clamp_kl_sup + kuma_loss_sup # + yt_loss_sup
+                loss_sup      = ce_loss_sup + kl_sup * clamp_kl_sup - kuma_loss_sup # + yt_loss_sup
 
                 ############ UNSUPERVISED PIPIELINE ############
                 loss_unsup     = torch.zeros(1).to(device)
@@ -397,7 +398,7 @@ def train(config, vocab, dont_save):
                                 ce_loss_sup.detach().cpu().item(),
                                 kl_sup.detach().cpu().item(),
                                 clamp_kl_sup.detach().cpu().item(),
-                                kl_kuma_sup.detach().cpu().item(),
+                                kuma_loss_sup.detach().cpu().item(),
                                 yt_loss_sup.detach().cpu().item(),
                                 ce_loss_unsup.detach().cpu().item(),
                                 kl_unsup.detach().cpu().item(),
