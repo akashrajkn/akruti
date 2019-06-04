@@ -351,7 +351,7 @@ def train(config, vocab, dont_save):
                 ce_loss_sup   = ce_loss_func(x_t_p_sup, x_t_a_sup)
                 kl_sup        = kl_div_sup(mu_sup, logvar_sup)
                 # kuma_loss_sup = torch.sum(torch.distributions.kl.kl_divergence(h_kuma_post_sup, h_kuma_prior))
-                kuma_loss_sup = torch.mean(h_kuma_prior.log_prob(torch.sum(y_t_sup, dim=0)))
+                kuma_loss_sup = torch.sum(h_kuma_prior.log_prob(torch.sum(y_t_sup, dim=0)))
                 # yt_loss_sup = loss_func_sup(y_t_p_sup, torch.sum(y_t_sup, dim=0))
                 yt_loss_sup   = torch.zeros(1)
 
@@ -380,7 +380,7 @@ def train(config, vocab, dont_save):
                     # Compute unsupervised loss
                     ce_loss_unsup  = ce_loss_func(x_t_p_unsup, x_t_a_unsup)
                     kl_unsup       = kl_div_sup(mu_unsup, logvar_unsup)
-                    kl_kuma_unsup  = torch.sum(torch.distributions.kl.kl_divergence(h_kuma_post_unsup, h_kuma_prior))
+                    kl_kuma_unsup  = torch.mean(torch.distributions.kl.kl_divergence(h_kuma_post_unsup, h_kuma_prior))
 
                     clamp_kl_unsup = torch.clamp(kl_unsup.mean(), min=habits_lambda).squeeze()
                     loss_unsup     = ce_loss_unsup + kl_unsup * clamp_kl_unsup + kl_kuma_unsup
