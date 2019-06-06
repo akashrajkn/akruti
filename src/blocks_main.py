@@ -15,7 +15,8 @@ from torch.utils.data import DataLoader
 from timeit import default_timer as timer
 from datetime import timedelta
 
-from blocks import VAE
+from blocks import VAE, L_MSVAE
+from models import TagEmbedding
 from dataset import MorphologyDatasetTask3, Vocabulary
 
 
@@ -36,15 +37,31 @@ def initialize_model(config):
     else:
         device = torch.device(config['device'])
 
-    vae        = VAE(vocab_size  =config['vocab_size'],
-                     emb_dim     =config['char_emb_dim'],
-                     z_dim       =config['z_dim'],
-                     h_dim       =config['enc_h_dim'],
-                     device      =device,
-                     max_len     =config['max_seq_len'],
-                     padding_idx =config['padding_idx']).to(device)
+    if config['model'] == 'vae':
+        vae        = VAE(vocab_size  =config['vocab_size'],
+                         emb_dim     =config['char_emb_dim'],
+                         z_dim       =config['z_dim'],
+                         h_dim       =config['enc_h_dim'],
+                         device      =device,
+                         max_len     =config['max_seq_len'],
+                         padding_idx =config['padding_idx']).to(device)
+        return vae
 
-    return vae
+    if config['model'] == 'msvae':
+        tag_embedding = TagEmbedding(input_dim  =config['label_len'],
+                                     emb_dim    =config['tag_emb_dim'],
+                                     device     =device)
+
+        msvae         = L_MSVAE(vocab_size   =config['vocab_size'],
+                                emb_dim      =config['char_emb_dim'],
+                                tag_embedding=tag_embedding,
+                                z_dim        =config['z_dim'],
+                                h_dim        =config['enc_h_dim'],
+                                device       =device,
+                                max_len      =config['max_seq_len'],
+                                padding_idx  =config['padding_idx']).to(device)
+
+        return msvae
 
 
 def initialize_dataloader(run_type, language, task, vocab, batch_size, shuffle, max_unsup=10000, num_workers=2):
@@ -57,6 +74,8 @@ def initialize_dataloader(run_type, language, task, vocab, batch_size, shuffle, 
 
     if task == 'sup':
         tasks = ['task3p']
+    elif task == 'MVSAE':
+        tasks = ['task1', 'task3p']
     else:
         tasks = ['task1p', 'task2p']
 
@@ -86,7 +105,7 @@ def train(config, vocab, dont_save):
     '''
     Train function
     '''
-    train_loader_sup, morph_dat = initialize_dataloader(run_type='train', language=config['language'], task='sup',
+    train_loader_sup, morph_dat = initialize_dataloader(run_type='train', language=config['language'], task='MVSAE',
                                                         vocab=vocab, batch_size=config['batch_size'], shuffle=True)
 
     config['vocab_size']    = morph_dat.get_vocab_size()
@@ -100,8 +119,8 @@ def train(config, vocab, dont_save):
         device      = torch.device(config['device'])
 
     # Model declaration
-    vae_model       = initialize_model(config)
-    optimizer       = optim.Adadelta(vae_model.parameters(), lr=config['lr'], rho=config['rho'])
+    model           = initialize_model(config)
+    optimizer       = optim.Adadelta(model.parameters(), lr=config['lr'], rho=config['rho'])
     ce_loss_func    = nn.CrossEntropyLoss()  #ignore_index=config['padding_idx'])
 
     kl_weight       = config['kl_start']
@@ -116,21 +135,21 @@ def train(config, vocab, dont_save):
     print('-' * 13)
     print('    MODEL')
     print('-' * 13)
-    print(vae_model)
+    print(model)
     print('-' * 13)
     print('    TRAIN')
     print('-' * 13)
 
     if not dont_save:
         try:
-            os.mkdir('../models/vae_{}-{}'.format(config['language'], config['model_id']))
+            os.mkdir('../models/{}_{}-{}'.format(config['model'], config['language'], config['model_id']))
         except OSError:
             print("Directory/Model already exists")
             return
 
     epoch_details  = 'epoch, ce_loss_sup, kl_sup, clamp_kl_sup, loss_sup\n'
 
-    vae_model.train()
+    model.train()
     for epoch in range(config['epochs']):
 
         start        = timer()
@@ -149,14 +168,16 @@ def train(config, vocab, dont_save):
             with autograd.detect_anomaly():
                 x_s_sup   = sample_batched_sup['source_form'].to(device)
                 x_t_sup   = sample_batched_sup['target_form'].to(device)
+                y_t_sup   = sample_batched_sup['msd'].to(device)
 
                 x_s_sup   = torch.transpose(x_s_sup, 0, 1)
                 x_t_sup   = torch.transpose(x_t_sup, 0, 1)
+                y_t_sup   = torch.transpose(y_t_sup, 0, 1)
 
                 optimizer.zero_grad()
 
                 ############ PIPIELINE ############
-                x_t_p_sup, mu_sup, logvar_sup = vae_model(x_t_sup)
+                x_t_p_sup, mu_sup, logvar_sup = model(x_t_sup, y_t_sup)
 
                 x_t_p_sup = x_t_p_sup[1:].view(-1, x_t_p_sup.shape[-1])
                 x_t_a_sup = x_t_sup[1:].contiguous().view(-1)
@@ -174,7 +195,7 @@ def train(config, vocab, dont_save):
                 total_loss    = loss_sup
                 total_loss.backward()
 
-            torch.nn.utils.clip_grad_norm_(vae_model.parameters(), 10)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 10)
             optimizer.step()
 
             num_batches   += 1
@@ -199,17 +220,17 @@ def train(config, vocab, dont_save):
         torch.save(
             {
                 'epoch'               : epoch,
-                'model_state_dict'    : vae_model.state_dict(),
+                'model_state_dict'    : model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'loss'                : epoch_loss / (num_batches + 1),
                 'config'              : config,
                 'vocab'               : vocab
-            }, '../models/vae_{}-{}/model.pt'.format(config['language'], config['model_id']))
+            }, '../models/{}_{}-{}/model.pt'.format(config['model'], config['language'], config['model_id']))
 
     if dont_save:
         return
 
-    with open('../models/vae_{}-{}/epoch_details.csv'.format(config['language'], config['model_id']), 'w+') as f:
+    with open('../models/{}_{}-{}/epoch_details.csv'.format(config['model'], config['language'], config['model_id']), 'w+') as f:
         f.write(epoch_details)
 
 
@@ -219,6 +240,7 @@ if __name__ == "__main__":
     parser.add_argument('--train',       action="store_true")
     parser.add_argument('--test',        action="store_true")
     parser.add_argument('--dont_save',   action="store_true",        default=False)
+    parser.add_argument('-model',        action="store", type=str,   default='vae')
     parser.add_argument('-model_id',     action="store", type=int)
     parser.add_argument('-language',     action="store", type=str)
     parser.add_argument('-device',       action="store", type=str,   default='cuda')
@@ -226,6 +248,7 @@ if __name__ == "__main__":
     parser.add_argument('-enc_h_dim',    action="store", type=int,   default=256)
     parser.add_argument('-dec_h_dim',    action="store", type=int,   default=512)
     parser.add_argument('-char_emb_dim', action="store", type=int,   default=300)
+    parser.add_argument('-tag_emb_dim',  action="store", type=int,   default=200)
     parser.add_argument('-z_dim',        action="store", type=int,   default=150)
     parser.add_argument('-batch_size',   action="store", type=int,   default=32)
     parser.add_argument('-kl_start',     action="store", type=float, default=0.0)
@@ -247,6 +270,7 @@ if __name__ == "__main__":
     config['enc_h_dim']     = args.enc_h_dim
     config['dec_h_dim']     = args.dec_h_dim
     config['char_emb_dim']  = args.char_emb_dim
+    config['tag_emb_dim']   = args.tag_emb_dim
     config['z_dim']         = args.z_dim
     config['lambda_m']      = args.lambda_m
     config['batch_size']    = args.batch_size
@@ -254,6 +278,7 @@ if __name__ == "__main__":
     config['lr']            = args.lr
     config['rho']           = args.rho
     config['num_workers']   = args.num_workers
+    config['model']         = args.model
 
     # TRAIN
     if run_train:
