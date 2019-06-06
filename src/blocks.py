@@ -7,11 +7,6 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 
-from kumaraswamy import Kumaraswamy
-from hard_kumaraswamy import StretchedAndRectifiedDistribution as HardKumaraswamy
-
-from models import WordEncoder, WordDecoder, TagEmbedding, Attention
-
 
 class VAE(nn.Module):
     '''
@@ -30,11 +25,12 @@ class VAE(nn.Module):
         self.max_len     = max_len
         self.padding_idx = padding_idx
 
-        self.embedding = nn.Embedding(self.input_dim, e_dim, padding_idx=padding_idx)
+        self.embedding = nn.Embedding(self.input_dim, emb_dim, padding_idx=padding_idx)
         self.rnn_enc   = nn.GRU(emb_dim, h_dim, bidirectional=True)
-        self.rnn_dec   = nn.GRU(z_dim, self.output_dim)
+        self.rnn_dec   = nn.GRU(emb_dim + z_dim, h_dim * 2)
         self.fc_mu     = nn.Linear(h_dim * 2, z_dim)
         self.fc_sigma  = nn.Linear(h_dim * 2, z_dim)
+        self.out       = nn.Linear(h_dim * 2, self.output_dim)
 
     def reparameterize(self, mu, logvar):
         std = torch.exp(0.5 * logvar)
@@ -57,12 +53,14 @@ class VAE(nn.Module):
         input    = o.type(torch.LongTensor).to(self.device)
         input    = input.unsqueeze(0)
         embedded = self.embedding(input)
+        z        = z.unsqueeze(0)
 
+        rnn_dec_input  = torch.cat((embedded, z), dim=2)
+        output, hidden = self.rnn_dec(rnn_dec_input, h.unsqueeze(0))
+        output         = output.squeeze(0)
+        output         = self.out(output)
 
-
-
-
-
+        return output, hidden.squeeze(0)
 
     def forward(self, x):
 
