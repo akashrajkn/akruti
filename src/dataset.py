@@ -167,7 +167,9 @@ class MorphologyDatasetTask3(Dataset):
                     frames.append(data)
 
         self.pd_data = pd.concat(frames)
-        self.pd_data = self.pd_data.head(self.max_unsup)
+
+        if self.tasks[0] != 'task3p':
+            self.pd_data = self.pd_data.head(self.max_unsup)
 
     def _max_sequence_length(self):
         '''
