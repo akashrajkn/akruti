@@ -237,7 +237,7 @@ def train(config, vocab, dont_save):
     else:
         params      = list(model.parameters()) + list(kumaMSD.parameters())
     optimizer       = optim.Adadelta(params,   lr=config['lr'], rho=config['rho'])
-    ce_loss_func    = nn.CrossEntropyLoss()  #ignore_index=config['padding_idx'])
+    ce_loss_func    = nn.CrossEntropyLoss(ignore_index=config['padding_idx'])
     loss_func_sup   = nn.BCELoss(reduction='mean')
 
     kl_weight       = config['kl_start']
@@ -352,14 +352,14 @@ def train(config, vocab, dont_save):
                 kl_sup        = kl_div_sup(mu_sup, logvar_sup)
                 # kuma_loss_sup = torch.sum(torch.distributions.kl.kl_divergence(h_kuma_post_sup, h_kuma_prior))
                 kuma_loss_sup = torch.mean(h_kuma_prior.log_prob(torch.sum(y_t_sup, dim=0)))
-                # yt_loss_sup = loss_func_sup(y_t_p_sup, torch.sum(y_t_sup, dim=0))
-                yt_loss_sup   = torch.zeros(1)
+                yt_loss_sup = loss_func_sup(y_t_p_sup, torch.sum(y_t_sup, dim=0))
+                # yt_loss_sup   = torch.zeros(1)
 
                 # ha bits, like free bits but over whole layer
                 # REFERENCE: https://github.com/kastnerkyle/pytorch-text-vae
                 habits_lambda = config['lambda_m']
                 clamp_kl_sup  = torch.clamp(kl_sup.mean(), min=habits_lambda).squeeze()
-                loss_sup      = ce_loss_sup + kl_sup * clamp_kl_sup - kuma_loss_sup # + yt_loss_sup
+                loss_sup      = ce_loss_sup + kl_sup * clamp_kl_sup - kuma_loss_sup + yt_loss_sup
 
                 ############ UNSUPERVISED PIPIELINE ############
                 loss_unsup     = torch.zeros(1).to(device)
@@ -385,7 +385,7 @@ def train(config, vocab, dont_save):
                     clamp_kl_unsup = torch.clamp(kl_unsup.mean(), min=habits_lambda).squeeze()
                     loss_unsup     = ce_loss_unsup + kl_unsup * clamp_kl_unsup + kl_kuma_unsup
 
-                total_loss     = loss_sup + config['dt_unsup'] * loss_unsup
+                total_loss = loss_sup + config['dt_unsup'] * loss_unsup
                 total_loss.backward()
 
             torch.nn.utils.clip_grad_norm_(list(model.parameters()) + list(kumaMSD.parameters()), 10)

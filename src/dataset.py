@@ -160,9 +160,6 @@ class MorphologyDatasetTask3(Dataset):
         for task in self.tasks:
             for f_type in f_types:
 
-                if task == 'task1p' and f_type == 'dev':
-                    continue
-
                 filepath = common_path + '-{}-{}'.format(task, f_type)
 
                 if os.path.isfile(filepath):
