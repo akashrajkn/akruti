@@ -74,10 +74,8 @@ def initialize_dataloader(run_type, language, task, vocab, batch_size, shuffle, 
 
     if task == 'sup':
         tasks = ['task3p']
-    elif task == 'MVSAE':
-        tasks = ['task1', 'task3p']
-    else:
-        tasks = ['task1p', 'task2p']
+    elif task == 'msvae' or task == 'vae':
+        tasks = ['task1']
 
     morph_data = MorphologyDatasetTask3(test=is_test, language=language, vocab=vocab, tasks=tasks, get_unprocessed=is_test,
                                         max_unsup=max_unsup, max_seq_len=max_seq_len)
@@ -105,7 +103,7 @@ def train(config, vocab, dont_save):
     '''
     Train function
     '''
-    train_loader_sup, morph_dat = initialize_dataloader(run_type='train', language=config['language'], task='MVSAE',
+    train_loader_sup, morph_dat = initialize_dataloader(run_type='train', language=config['language'], task=config['model'],
                                                         vocab=vocab, batch_size=config['batch_size'], shuffle=True)
 
     config['vocab_size']    = morph_dat.get_vocab_size()
