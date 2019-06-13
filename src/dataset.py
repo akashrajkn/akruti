@@ -88,7 +88,7 @@ class Vocabulary():
 class MorphologyDatasetTask3(Dataset):
     """Morphology reinflection dataset."""
 
-    def __init__(self, test, language, vocab, tasks, get_unprocessed=False, delimiter='\t', max_unsup=10000, max_seq_len=None):
+    def __init__(self, test, language, vocab, tasks, get_unprocessed=False, delimiter='\t', max_unsup=10000, max_seq_len=None, csvpath=None):
         """
         Args:
             test (string)     : train or test
@@ -101,6 +101,7 @@ class MorphologyDatasetTask3(Dataset):
         self.get_unprocessed = get_unprocessed  # raw output
         self.delimiter       = delimiter
         self.max_unsup       = max_unsup
+        self.csvpath         = csvpath
 
         self._get_pd_data()
 
@@ -144,6 +145,11 @@ class MorphologyDatasetTask3(Dataset):
         return len(self.char_2_idx)
 
     def _get_pd_data(self):
+
+        if self.csvpath is not None:
+            self.pd_data  = pd.read_csv(self.csvpath, delimiter=self.delimiter, header=None)
+            return
+
         common_path   = '../data/files/{}'.format(self.language)
 
         if self.test:

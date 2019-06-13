@@ -98,7 +98,6 @@ def train(config, vocab, dont_save):
     # Model declaration
     model           = initialize_model(config)
     optimizer       = optim.Adadelta(model.parameters(), lr=config['lr'], rho=config['rho'])
-    loss_function   = nn.BCELoss(reduction='mean')
     len_data        = len(train_loader_sup)
 
     print('-' * 13)
@@ -148,7 +147,7 @@ def train(config, vocab, dont_save):
                 y_t_p, h_kuma_post  = model(x_t)
 
                 # Compute supervised loss
-                total_loss = loss_function(y_t_p, torch.sum(y_t, dim=0))
+                total_loss = -1. * torch.mean(h_kuma_post.log_prob(torch.sum(y_t, dim=0)))
                 total_loss.backward()
 
             torch.nn.utils.clip_grad_norm_(model.parameters(), 10)

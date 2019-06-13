@@ -121,7 +121,8 @@ def kl_div_sup(mu, logvar):
     '''
     Compute KL divergence between N(mu, logvar) and N(0, 1)
     '''
-    return - 0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+    # return - 0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+    return - 0.5 * (2 * logvar - torch.pow(mu, 2) - torch.pow(torch.exp(logvar), 2) + 1)
 
 
 def test(language, model_id, dont_save):
@@ -238,7 +239,6 @@ def train(config, vocab, dont_save):
         params      = list(model.parameters()) + list(kumaMSD.parameters())
     optimizer       = optim.Adadelta(params,   lr=config['lr'], rho=config['rho'])
     ce_loss_func    = nn.CrossEntropyLoss(ignore_index=config['padding_idx'])
-    loss_func_sup   = nn.BCELoss(reduction='mean')
 
     kl_weight       = config['kl_start']
 
@@ -270,7 +270,7 @@ def train(config, vocab, dont_save):
             return
 
     epoch_details  = 'epoch, ce_loss_sup, kl_sup, clamp_kl_sup, kuma_loss_sup, yt_loss_sup, '
-    epoch_details +=        'ce_loss_unsup, kl_unsup, clamp_kl_unsup, kl_kuma_unsup, '
+    epoch_details +=        'ce_loss_unsup, kl_unsup, clamp_kl_unsup, kl_kuma_unsup, clamp_kl_kuma_unsup, '
     epoch_details += 'loss_sup, loss_unsup, total_loss\n'
 
     # init kuma prior
@@ -352,14 +352,13 @@ def train(config, vocab, dont_save):
                 kl_sup        = kl_div_sup(mu_sup, logvar_sup)
                 # kuma_loss_sup = torch.sum(torch.distributions.kl.kl_divergence(h_kuma_post_sup, h_kuma_prior))
                 kuma_loss_sup = -1. * torch.mean(h_kuma_prior.log_prob(torch.sum(y_t_sup, dim=0)))
-                # yt_loss_sup   = loss_func_sup(y_t_p_sup, torch.sum(y_t_sup, dim=0))
                 yt_loss_sup   = -1. * torch.mean(h_kuma_post_sup.log_prob(torch.sum(y_t_sup, dim=0)))
 
                 # ha bits, like free bits but over whole layer
                 # REFERENCE: https://github.com/kastnerkyle/pytorch-text-vae
                 habits_lambda = config['lambda_m']
                 clamp_kl_sup  = torch.clamp(kl_sup.mean(), min=habits_lambda).squeeze()
-                loss_sup      = ce_loss_sup + kl_sup * clamp_kl_sup + kuma_loss_sup + yt_loss_sup
+                loss_sup      = ce_loss_sup + clamp_kl_sup + yt_loss_sup
 
                 ############ UNSUPERVISED PIPIELINE ############
                 loss_unsup     = torch.zeros(1).to(device)
@@ -380,10 +379,12 @@ def train(config, vocab, dont_save):
                     # Compute unsupervised loss
                     ce_loss_unsup  = ce_loss_func(x_t_p_unsup, x_t_a_unsup)
                     kl_unsup       = kl_div_sup(mu_unsup, logvar_unsup)
-                    kl_kuma_unsup  = torch.sum(torch.distributions.kl.kl_divergence(h_kuma_post_unsup, h_kuma_prior))
+                    kl_kuma_unsup  = torch.distributions.kl.kl_divergence(h_kuma_post_unsup, h_kuma_prior)
 
-                    clamp_kl_unsup = torch.clamp(kl_unsup.mean(), min=habits_lambda).squeeze()
-                    loss_unsup     = ce_loss_unsup + kl_unsup * clamp_kl_unsup + kl_kuma_unsup
+                    habits_lambda_kuma  = config['lambda_kuma']
+                    clamp_kl_unsup      = torch.clamp(kl_unsup.mean(), min=habits_lambda).squeeze()
+                    clamp_kl_kuma_unsup = torch.clamp(kl_kuma_unsup.mean(), min=habits_lambda_kuma).squeeze()
+                    loss_unsup     = ce_loss_unsup + clamp_kl_unsup + clamp_kl_kuma_unsup
 
                 total_loss = loss_sup + config['dt_unsup'] * loss_unsup
                 total_loss.backward()
@@ -396,14 +397,15 @@ def train(config, vocab, dont_save):
             epoch_details += '{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}\n'.format(
                                 epoch,
                                 ce_loss_sup.detach().cpu().item(),
-                                kl_sup.detach().cpu().item(),
+                                torch.sum(kl_sup).detach().cpu().item(),
                                 clamp_kl_sup.detach().cpu().item(),
                                 kuma_loss_sup.detach().cpu().item(),
                                 yt_loss_sup.detach().cpu().item(),
                                 ce_loss_unsup.detach().cpu().item(),
-                                kl_unsup.detach().cpu().item(),
+                                torch.sum(kl_unsup).detach().cpu().item(),
                                 clamp_kl_unsup.detach().cpu().item(),
-                                kl_kuma_unsup.detach().cpu().item(),
+                                torch.sum(kl_kuma_unsup).detach().cpu().item(),
+                                clamp_kl_kuma_unsup.detach().cpu().item(),
                                 loss_sup.detach().cpu().item(),
                                 loss_unsup.detach().cpu().item(),
                                 total_loss.detach().cpu().item())
@@ -462,6 +464,7 @@ if __name__ == "__main__":
     parser.add_argument('-batch_size',   action="store", type=int,   default=64)
     parser.add_argument('-kl_start',     action="store", type=float, default=0.0)
     parser.add_argument('-lambda_m',     action="store", type=float, default=0.2)
+    parser.add_argument('-lambda_kuma',  action="store", type=float, default=0.2)
     parser.add_argument('-lr',           action="store", type=float, default=0.1)
     parser.add_argument('-kuma_msd',     action="store", type=int,   default=256)
     parser.add_argument('-a0',           action="store", type=float, default=0.139)
@@ -489,6 +492,7 @@ if __name__ == "__main__":
     config['dec_dropout']   = args.dec_dropout
     config['z_dim']         = args.z_dim
     config['lambda_m']      = args.lambda_m
+    config['lambda_kuma']   = args.lambda_kuma
     config['batch_size']    = args.batch_size
     config['device']        = args.device
     config['lr']            = args.lr
