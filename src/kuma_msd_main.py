@@ -98,6 +98,7 @@ def train(config, vocab, dont_save):
     # Model declaration
     model           = initialize_model(config)
     optimizer       = optim.Adadelta(model.parameters(), lr=config['lr'], rho=config['rho'])
+    ce_loss         = nn.BCELoss()
     len_data        = len(train_loader_sup)
 
     print('-' * 13)
@@ -118,7 +119,7 @@ def train(config, vocab, dont_save):
             print("Directory/Model already exists")
             return
 
-    epoch_details  = 'epoch, loss\n'
+    epoch_details  = 'epoch, loss, bceloss\n'
 
     model.train()
     for epoch in range(config['epochs']):
@@ -147,6 +148,7 @@ def train(config, vocab, dont_save):
                 y_t_p, h_kuma_post  = model(x_t)
 
                 # Compute supervised loss
+                bce_loss   = ce_loss(y_t_p, torch.sum(y_t, dim=0))
                 total_loss = -1. * torch.mean(h_kuma_post.log_prob(torch.sum(y_t, dim=0)))
                 total_loss.backward()
 
@@ -155,7 +157,8 @@ def train(config, vocab, dont_save):
 
             num_batches   += 1
             epoch_loss    += total_loss.detach().cpu().item()
-            epoch_details += '{}, {}\n'.format(epoch, epoch_loss)
+            epoch_details += '{}, {}, {}\n'.format(epoch, total_loss.total_loss.detach().cpu().item(),
+                                                   bce_loss.detach().cpu().item())
 
         end = timer()
 
