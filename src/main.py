@@ -85,6 +85,7 @@ def initialize_model(config):
                             h_dim           =config['msd_h_dim'],
                             num_tags        =config['label_len'],
                             encoder         =encoder_x_t,
+                            device          =device,
                             unconstrained   =config['unconstrained'],
                             use_made        =config['use_made']).to(device)
 

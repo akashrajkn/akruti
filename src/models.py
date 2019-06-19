@@ -205,13 +205,14 @@ class KumaMSD(nn.Module):
     '''
     Generates samples of y_t (MSD) vector.
     '''
-    def __init__(self, input_dim, h_dim, num_tags, encoder, l=-1., r=2., unconstrained=False, use_made=False):
+    def __init__(self, input_dim, h_dim, num_tags, encoder, device, l=-1., r=2., unconstrained=False, use_made=False):
         super(KumaMSD, self).__init__()
 
         self.input_dim     = input_dim
         self.h_dim         = h_dim
         self.num_tags      = num_tags
         self.encoder       = encoder
+        self.device        = device
         self.support       = [-l, r]
         self.unconstrained = unconstrained
         self.use_made      = use_made
