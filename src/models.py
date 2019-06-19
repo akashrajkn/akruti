@@ -246,7 +246,7 @@ class KumaMSD(nn.Module):
 
         if self.use_made:
             u_tril = torch.ones(self.h_dim, self.h_dim)
-            u_tril = torch.tensor(np.tril(u_tril), requies_grad=False).to(self.device)
+            u_tril = torch.tensor(np.tril(u_tril), requires_grad=False).to(self.device)
             logits = torch.mm(logits, u_tril)
 
         if self.unconstrained:
