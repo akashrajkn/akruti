@@ -5,6 +5,7 @@ import time
 import numpy as np
 
 import torch
+import torch.distributions as dist
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
@@ -128,7 +129,7 @@ class WordDecoder(nn.Module):
         self.out          = nn.Linear(tag_emb_dim + dec_h_dim, output_dim)
         self.dropout      = nn.Dropout(dropout)
 
-    def forward(self, input, hidden, tag_embeds, z):
+    def forward(self, input, hidden, tag_embeds, z, drop):
         '''
         input      -- previous input
         hidden     -- hidden state of the decoder
@@ -137,8 +138,16 @@ class WordDecoder(nn.Module):
         '''
         input    = input.type(torch.LongTensor).to(self.device)
         input    = input.unsqueeze(0)
-        embedded = self.dropout(self.embedding(input))
+        # embedded = self.dropout(self.embedding(input))
+        embedded = self.embedding(input)
         z        = z.unsqueeze(0)  # For tensor dimension compatibility - see rnn_input
+
+        if drop:
+            embedded = embedded * 0.
+
+        # print("=-----")
+        # print(embedded)
+        # print(embedded.size())
 
         if self.no_attn:
             a = torch.ones((tag_embeds.size(0), 1, tag_embeds.size(1))).to(self.device)
@@ -177,6 +186,9 @@ class MSVED(nn.Module):
         self.device        = device
         self.vocab_size    = vocab_size
 
+        # dropout: 40%
+        self.dropout_dist   = dist.bernoulli.Bernoulli(torch.tensor([0.4]))
+
     def reparameterize(self, mu, logvar):
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
@@ -194,7 +206,8 @@ class MSVED(nn.Module):
         o              = x_t[0, :]  # Start tokens
 
         for t in range(1, self.max_len):
-            o, h       = self.decoder(o, h, tag_embeds, mu_u)
+            drop       = (self.dropout_dist.sample() == torch.tensor([1.]))
+            o, h       = self.decoder(o, h, tag_embeds, mu_u, drop)
             outputs[t] = o
             o          = o.max(1)[1]
 
@@ -229,14 +242,12 @@ class KumaMSD(nn.Module):
     def forward(self, x_t):
 
         h, _, _ = self.encoder(x_t)
+        logits  = F.relu(self.fc(h))
 
         if self.use_made:
-            cols    = h.size(1)
-            u_tril  = torch.ones(cols, cols).to(self.device)
-            u_tril  = torch.tensor(np.tril(u_tril))
-            h       = torch.mm(h, u_tril)
-
-        logits  = F.relu(self.fc(h))
+            u_tril = torch.ones(self.h_dim, self.h_dim)
+            u_tril = torch.tensor(np.tril(u_tril), requies_grad=False).to(self.device)
+            logits = torch.mm(logits, u_tril)
 
         if self.unconstrained:
             ai   = F.softplus(self.ai(logits))

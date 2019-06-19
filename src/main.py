@@ -385,7 +385,7 @@ def train(config, vocab, dont_save):
                     kl_kuma_unsup  = torch.distributions.kl.kl_divergence(h_kuma_post_unsup, h_kuma_prior)
 
                     habits_lambda_kuma  = config['lambda_kuma']
-                    clamp_kl_unsup      = torch.clamp(kl_unsup.mean(), min=habits_lambda).squeeze()
+                    clamp_kl_unsup      = torch.clamp(kl_unsup.mean(),      min=habits_lambda).squeeze()
                     clamp_kl_kuma_unsup = torch.clamp(kl_kuma_unsup.mean(), min=habits_lambda_kuma).squeeze()
                     loss_unsup     = ce_loss_unsup + clamp_kl_unsup + clamp_kl_kuma_unsup
 
@@ -400,7 +400,7 @@ def train(config, vocab, dont_save):
             epoch_details += '{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}\n'.format(
                                 epoch,
                                 ce_loss_sup.detach().cpu().item(),
-                                torch.sum(kl_sup).detach().cpu().item(),
+                                kl_sup.mean().detach().cpu().item(),
                                 clamp_kl_sup.detach().cpu().item(),
                                 kuma_loss_sup.detach().cpu().item(),
                                 yt_loss_sup.detach().cpu().item(),
