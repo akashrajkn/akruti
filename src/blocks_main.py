@@ -188,7 +188,7 @@ def train(config, vocab, dont_save):
                 # REFERENCE: https://github.com/kastnerkyle/pytorch-text-vae
                 habits_lambda = config['lambda_m']
                 clamp_kl_sup  = torch.clamp(kl_sup.mean(), min=habits_lambda).squeeze()
-                loss_sup      = ce_loss_sup + kl_sup * clamp_kl_sup
+                loss_sup      = ce_loss_sup + clamp_kl_sup
 
                 total_loss    = loss_sup
                 total_loss.backward()

@@ -84,7 +84,9 @@ def initialize_model(config):
     kumaMSD       = KumaMSD(input_dim       =config['enc_h_dim'] * 2,
                             h_dim           =config['msd_h_dim'],
                             num_tags        =config['label_len'],
-                            encoder         =encoder_x_t).to(device)
+                            encoder         =encoder_x_t,
+                            unconstrained   =config['unconstrained'],
+                            use_made        =config['use_made']).to(device)
 
     return model, kumaMSD
 
@@ -445,11 +447,14 @@ def continue_training(model, config):
 if __name__ == "__main__":
 
     parser                  = argparse.ArgumentParser()
-    parser.add_argument('--train',       action="store_true")
-    parser.add_argument('--test',        action="store_true")
-    parser.add_argument('--only_sup',    action="store_true")
-    parser.add_argument('--no_attn',     action="store_true",        default=False)
-    parser.add_argument('--dont_save',   action="store_true",        default=False)
+    parser.add_argument('--train',         action="store_true")
+    parser.add_argument('--test',          action="store_true")
+    parser.add_argument('--only_sup',      action="store_true")
+    parser.add_argument('--no_attn',       action="store_true",      default=False)
+    parser.add_argument('--dont_save',     action="store_true",      default=False)
+    parser.add_argument('--unconstrained', action="store_true",      default=False)
+    parser.add_argument('--use_made',      action="store_true",      default=False)
+
     parser.add_argument('-model_id',     action="store", type=int)
     parser.add_argument('-language',     action="store", type=str)
     parser.add_argument('-device',       action="store", type=str,   default='cuda')
@@ -505,6 +510,8 @@ if __name__ == "__main__":
     config['dt_unsup']      = args.dt_unsup
     config['num_workers']   = args.num_workers
     config['no_attn']       = args.no_attn
+    config['unconstrained'] = args.unconstrained
+    config['use_made']      = args.use_made
 
     # TRAIN
     if run_train:

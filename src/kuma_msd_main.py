@@ -157,7 +157,7 @@ def train(config, vocab, dont_save):
 
             num_batches   += 1
             epoch_loss    += total_loss.detach().cpu().item()
-            epoch_details += '{}, {}, {}\n'.format(epoch, total_loss.total_loss.detach().cpu().item(),
+            epoch_details += '{}, {}, {}\n'.format(epoch, total_loss.detach().cpu().item(),
                                                    bce_loss.detach().cpu().item())
 
         end = timer()

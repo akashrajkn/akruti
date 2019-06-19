@@ -2,6 +2,8 @@ import random
 import math
 import time
 
+import numpy as np
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -203,17 +205,20 @@ class KumaMSD(nn.Module):
     '''
     Generates samples of y_t (MSD) vector.
     '''
-    def __init__(self, input_dim, h_dim, num_tags, encoder, l=-1., r=2.):
+    def __init__(self, input_dim, h_dim, num_tags, encoder, l=-1., r=2., unconstrained=False, use_made=False):
         super(KumaMSD, self).__init__()
 
-        self.input_dim = input_dim
-        self.h_dim     = h_dim
-        self.num_tags  = num_tags
-        self.encoder   = encoder
-        self.support   = [-l, r]
+        self.input_dim     = input_dim
+        self.h_dim         = h_dim
+        self.num_tags      = num_tags
+        self.encoder       = encoder
+        self.support       = [-l, r]
+        self.unconstrained = unconstrained
+        self.use_made      = use_made
+
         # Learned kuma params
-        self.a         = 0.
-        self.b         = 0.
+        self.a  = 0.
+        self.b  = 0.
 
         # TODO: initialization
         self.fc = nn.Linear(input_dim, h_dim)
@@ -223,20 +228,28 @@ class KumaMSD(nn.Module):
     def forward(self, x_t):
 
         h, _, _ = self.encoder(x_t)
+
+        if self.use_made:
+            cols    = h.size(1)
+            u_tril  = torch.ones(cols, cols).to(self.device)
+            u_tril  = torch.tensor(np.tril(u_tril))
+            h       = torch.mm(h, u_tril)
+
         logits  = F.relu(self.fc(h))
 
-        # ai      = F.softplus(self.ai(logits))
-        # bi      = F.softplus(self.bi(logits))
+        if self.unconstrained:
+            ai   = F.softplus(self.ai(logits))
+            bi   = F.softplus(self.bi(logits))
+            kuma = Kumaraswamy(ai, bi)
+        else:
+            ai   = 0.1 + torch.sigmoid(self.ai(logits))     * 0.8
+            bi   = 1   + torch.sigmoid(self.bi(logits) - 5) * 5
+            kuma = Kumaraswamy(ai / bi, (1 - ai) / bi)
 
-        # Constrained Kuma
-        ai      = 0.1 + torch.sigmoid(self.ai(logits))     * 0.8
-        bi      = 1   + torch.sigmoid(self.bi(logits) - 5) * 5
+        self.a = ai
+        self.b = bi
 
-        self.a  = ai
-        self.b  = bi
-
-        kuma    = Kumaraswamy(ai / bi, (1 - ai) / bi)
-        h_kuma  = HardKumaraswamy(kuma)
-        sample  = h_kuma.rsample()
+        h_kuma = HardKumaraswamy(kuma)
+        sample = h_kuma.rsample()
 
         return sample, h_kuma
