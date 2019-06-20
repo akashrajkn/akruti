@@ -79,7 +79,8 @@ def initialize_model(config):
                           decoder           =decoder,
                           max_len           =config['max_seq_len'],
                           vocab_size        =config['vocab_size'],
-                          device            =device).to(device)
+                          device            =device,
+                          dropout_type      =config['dropout_type']).to(device)
 
     kumaMSD       = KumaMSD(input_dim       =config['enc_h_dim'] * 2,
                             h_dim           =config['msd_h_dim'],
@@ -459,6 +460,7 @@ if __name__ == "__main__":
     parser.add_argument('-model_id',     action="store", type=int)
     parser.add_argument('-language',     action="store", type=str)
     parser.add_argument('-device',       action="store", type=str,   default='cuda')
+    parser.add_argument('-drop_type',    action="store", type=str,   default='random_chars')
     parser.add_argument('-epochs',       action="store", type=int,   default=50)
     parser.add_argument('-enc_h_dim',    action="store", type=int,   default=256)
     parser.add_argument('-dec_h_dim',    action="store", type=int,   default=512)
@@ -513,6 +515,7 @@ if __name__ == "__main__":
     config['no_attn']       = args.no_attn
     config['unconstrained'] = args.unconstrained
     config['use_made']      = args.use_made
+    config['dropout_type']  = args.drop_type
 
     # TRAIN
     if run_train:

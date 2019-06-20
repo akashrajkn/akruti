@@ -175,7 +175,7 @@ class MSVED(nn.Module):
     '''
     Multi-space Variational Encoder-Decoder
     '''
-    def __init__(self, encoder, tag_embedding, decoder, max_len, vocab_size, device):
+    def __init__(self, encoder, tag_embedding, decoder, max_len, vocab_size, device, dropout_type='random_chars'):
         super(MSVED, self).__init__()
 
         self.encoder       = encoder
@@ -185,9 +185,11 @@ class MSVED(nn.Module):
         self.max_len       = max_len
         self.device        = device
         self.vocab_size    = vocab_size
+        self.dropout_type  = dropout_type
 
         # dropout: 40%
-        self.dropout_dist   = dist.bernoulli.Bernoulli(torch.tensor([0.4]))
+        self.dropout_dist  = dist.bernoulli.Bernoulli(torch.tensor([0.4]))
+        self.poisson_dist  = dist.poisson.Poisson(torch.tensor([3.5]))
 
     def reparameterize(self, mu, logvar):
         std = torch.exp(0.5 * logvar)
@@ -205,8 +207,34 @@ class MSVED(nn.Module):
         # z              = self.reparameterize(mu_u, var_u)
         o              = x_t[0, :]  # Start tokens
 
+        dropout_idx = []
+
+        if self.dropout_type == 'contiguous':
+            mi = []
+            while True:
+                if len(mi) == 2:  # FIXME: make this a hyper parameter
+                    break
+
+                idx = np.random.choice(range(self.max_len))
+                if idx == 0:
+                    continue
+                mi.append(idx)
+
+            for i in mi:
+                length = int(self.poisson_dist.sample().item())
+                for j in range(i, i + length):
+                    dropout_idx.append(j)
+
         for t in range(1, self.max_len):
-            drop       = (self.dropout_dist.sample() == torch.tensor([1.]))
+
+            drop = False
+
+            if self.dropout_type   == 'random_chars':
+                drop     = (self.dropout_dist.sample() == torch.tensor([1.]))
+            elif self.dropout_type == 'contiguous':
+                if t in dropout_idx:
+                    drop = True
+
             o, h       = self.decoder(o, h, tag_embeds, mu_u, drop)
             outputs[t] = o
             o          = o.max(1)[1]
