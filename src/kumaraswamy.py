@@ -69,11 +69,56 @@ class Kumaraswamy(TransformedDistribution):
 
     def log_prob(self, value):
 
-        return torch.log(self.a + EPS) + torch.log(self.b + EPS) + (self.a - 1) * torch.log(value + EPS) \
-            + (self.b - 1) * torch.log(1 - value ** self.a + EPS)
+        term_1 = torch.log(self.a + EPS)
+        term_2 = torch.log(self.b + EPS)
+
+        term_31 = torch.log(value + EPS)
+        term_3 = (self.a - 1) * term_31
+        # term_411 = value ** self.a
+        term_411 = value.pow(self.a)
+
+        print("ADSFASDFASDFASFDASDFSADF")
+        print(value)
+        print(self.a)
+        print(value.size())
+        print(self.a.size())
+        print("XXXX")
+
+        term_41 = torch.log(1. - term_411 + EPS)
+        # term_41 = torch.log(torch.clamp(1. - value ** self.a, min=EPS))
+
+
+        term_4 = (self.b - 1) * term_41
+
+        print("TERM 41")
+        print(term_41)
+
+
+        val = term_1 + term_2 + term_3 + term_4
+
+        if torch.isnan(val.sum()):
+
+            print("&&&&&&&&&&&&&& log_prob &&&&&&&&&&&&&&")
+            # print(torch.log(1 - value ** self.a + EPS))
+            print(torch.log(self.a + EPS))
+            print(torch.log(self.b + EPS))
+            print((self.a - 1) * torch.log(value + EPS))
+            print((self.b - 1) * torch.log(1 - value ** self.a + EPS))
+            print("&&&&")
+
+        return val
 
     def log_cdf(self, value):
-        return torch.log(1. - (1. - value ** self.a) ** self.b + EPS)
+
+        val = torch.log(1. - (1. - value ** self.a) ** self.b + EPS)
+
+        # if torch.isnan(val.sum()):
+        #     print("log cdf")
+        #     print(1. - (1. - value ** self.a) ** self.b + EPS)
+
+        return val
+
+        # return torch.log(1. - (1. - value ** self.a) ** self.b + EPS)
 
     def cdf(self, value):
         return torch.exp(self.log_cdf(value))
@@ -100,10 +145,35 @@ class Kumaraswamy(TransformedDistribution):
         # U ~ Uniform(cdf(k0), cdf(k1))
         # K = F^-1(U)
         #  simulates K over the truncated support (k0,k1)
-        x = Uniform(self.cdf(torch.full_like(self.a, k0)),
-                    self.cdf(torch.full_like(self.b, k1))).rsample(sample_shape)
+        dist = Uniform(self.cdf(torch.full_like(self.a, k0)),
+                    torch.clamp(self.cdf(torch.full_like(self.b, k1)), max=(1.-EPS)))
+
+
+        print(self.a)
+        print(self.b)
+
+
+        print("Uniform")
+        print(dist.low)
+        print(dist.high)
+
+        x = dist.rsample(sample_shape)
+
+        # x = torch.clamp(x, max=1.)
+
+
+        # print(k0)
+        # print(k1)
+
+        print("++++++")
+        print(x)
+
         for transform in self.transforms:
             x = transform(x)
+            # print("===")
+
+        print(x)
+        print("+++")
         return x
 
 def kl_kumaraswamy_kumaraswamy(p, q, n_samples=1, exact_entropy=True):

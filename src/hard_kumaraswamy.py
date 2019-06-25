@@ -54,20 +54,41 @@ class StretchedAndRectifiedDistribution(torch.distributions.Distribution):
         self.loc = lower
         self.scale = upper - lower
 
-    def log_prob(self, value):
+    def log_prob(self, value, pp=False):
         # x ~ p(x), and y = hardtanh(x) -> y ~ q(y)
 
         # log_q(x==0) = cdf_p(0) and log_q(x) = log_q(x)
         zeros = torch.zeros_like(value)
         log_p = torch.where(value == zeros,
-                            torch.log(self.stretched.cdf(zeros)),
+                            torch.log(torch.clamp(self.stretched.cdf(zeros), min=EPS)),
                             self.stretched.log_prob(value))
 
         # log_q(x==1) = 1 - cdf_p(1)
         ones = torch.ones_like(value)
+        # print(self.stretched.cdf(ones))
+        # print(torch.log(1. - self.stretched.cdf(ones)))
+        # print(torch.log(1. - self.stretched.cdf(ones) + torch.tensor([EPS])))
+
+
+        # print("&&&&&&&&&&&&&")
+        # print(self.stretched.cdf(ones))
+        # print(torch.clamp(1 - self.stretched.cdf(ones), min=EPS))
+
         log_p = torch.where(value == ones,
-                            torch.log(1 - self.stretched.cdf(ones)),
+                            torch.log(torch.clamp(1 - self.stretched.cdf(ones), min=EPS)),
                             log_p)
+
+        if pp:
+
+            print("----")
+            #
+            # print(torch.log(1. - self.stretched.cdf(ones) + EPS))
+            # print("----")
+            # device = torch.device('cuda')
+            # print("log_prob")
+            # print(value)
+            # print(ones)
+            # print(torch.where(value == ones, torch.tensor([1.]).to(device), torch.tensor([0.]).to(device)))
 
         return log_p
 
@@ -96,7 +117,7 @@ class StretchedAndRectifiedDistribution(torch.distributions.Distribution):
 
 
 def kl_base_sampling(p, q, n_samples=1):
-    x = p.sample(sample_shape=torch.Size([n_samples]))
+    x = p.rsample(sample_shape=torch.Size([n_samples]))
     return (p.log_prob(x) - q.log_prob(x)).mean(0)
 
 
@@ -139,6 +160,7 @@ def kl_truncated_sampling(p, q, n_samples=1):
     # x ~ Base(a,b) where x \in (k0, k1)
     x = p.base.rsample_truncated(k0, k1, sample_shape=torch.Size([n_samples]))
     # x ~ Stretched(loc, scale) though constrained to (0, 1)
+
     x = p.loc + x * p.scale
     # wrt (lower, upper)
     log_ratio_cont = (p.stretched.log_prob(x) - q.stretched.log_prob(x)).mean(0)
@@ -162,7 +184,21 @@ def kl_truncated_sampling(p, q, n_samples=1):
     # wrt upper
     log_ratio_1 = log_p1 - log_q1
 
-    return p0 * log_ratio_0 + p1 * log_ratio_1 + p_cont * log_ratio_cont
+    print("*******")
+    # print(p.loc)
+    # print(p.scale)
+    print(torch.isnan(p.stretched.log_prob(x).sum()))
+    print(torch.isnan(q.stretched.log_prob(x).sum()))
+    print(torch.isnan(log_ratio_cont.sum()))
+
+    kl_0 = torch.where(p0 > 0., p0 * log_ratio_0, p0)
+    kl_1 = torch.where(p1 > 0., p1 * log_ratio_1, p1)
+    kl_c = torch.where(p_cont > 0., p_cont * log_ratio_cont, p_cont)
+
+    # print(p0 * log_ratio_0 + p1 * log_ratio_1 + p_cont * log_ratio_cont)
+    # print("**")
+
+    return kl_0 + kl_1 + kl_c
 
 
 @register_kl(StretchedAndRectifiedDistribution, StretchedAndRectifiedDistribution)
