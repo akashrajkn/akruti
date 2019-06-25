@@ -116,7 +116,7 @@ def initialize_dataloader(run_type, language, task, vocab, batch_size, shuffle, 
 def get_max_seq_len(language, vocab):
 
     tasks = ['task1p', 'task2p', 'task3p']
-    morph_data = MorphologyDatasetTask3(test=False, language=language, vocab=vocab, tasks=tasks)
+    morph_data = MorphologyDatasetTask3(test=False, language=language, vocab=vocab, tasks=tasks, for_max_len=True)
 
     return morph_data.max_seq_len
 
@@ -365,11 +365,12 @@ def train(config, vocab, dont_save):
                 loss_sup      = ce_loss_sup + clamp_kl_sup + yt_loss_sup
 
                 ############ UNSUPERVISED PIPIELINE ############
-                loss_unsup     = torch.zeros(1).to(device)
-                ce_loss_unsup  = torch.zeros(1).to(device)
-                kl_unsup       = torch.zeros(1).to(device)
-                clamp_kl_unsup = torch.zeros(1).to(device)
-                kl_kuma_unsup  = torch.zeros(1).to(device)
+                loss_unsup          = torch.zeros(1).to(device)
+                ce_loss_unsup       = torch.zeros(1).to(device)
+                kl_unsup            = torch.zeros(1).to(device)
+                clamp_kl_unsup      = torch.zeros(1).to(device)
+                kl_kuma_unsup       = torch.zeros(1).to(device)
+                clamp_kl_kuma_unsup = torch.zeros(1).to(device)
 
                 if not config['only_sup']:
                     y_t_p_unsup, h_kuma_post_unsup      = kumaMSD(x_t_unsup)

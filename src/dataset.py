@@ -88,7 +88,7 @@ class Vocabulary():
 class MorphologyDatasetTask3(Dataset):
     """Morphology reinflection dataset."""
 
-    def __init__(self, test, language, vocab, tasks, get_unprocessed=False, delimiter='\t', max_unsup=10000, max_seq_len=None, csvpath=None):
+    def __init__(self, test, language, vocab, tasks, get_unprocessed=False, delimiter='\t', max_unsup=10000, max_seq_len=None, csvpath=None, for_max_len=False):
         """
         Args:
             test (string)     : train or test
@@ -102,6 +102,7 @@ class MorphologyDatasetTask3(Dataset):
         self.delimiter       = delimiter
         self.max_unsup       = max_unsup
         self.csvpath         = csvpath
+        self.for_max_len     = for_max_len
 
         self._get_pd_data()
 
@@ -173,6 +174,9 @@ class MorphologyDatasetTask3(Dataset):
                     frames.append(data)
 
         self.pd_data = pd.concat(frames)
+
+        if self.for_max_len:
+            return
 
         if self.tasks[0] != 'task3p':
             self.pd_data = self.pd_data.head(self.max_unsup)
