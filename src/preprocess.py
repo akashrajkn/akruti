@@ -223,6 +223,38 @@ def modify_task3_files():
             if os.path.isfile(filepath):
                 process_task3_files(filepath)
 
+def task_2_more_data(filepath):
+
+    with open(filepath, 'r', encoding='utf-8') as f:
+        source = f.read()
+
+    out       = []
+    sentences = source.strip().split('\n')
+
+    for sentence in sentences:
+        line    = sentence.strip().split('\t')
+        n_line  = [line[3], line[0], line[1]]
+
+        out.append('\t'.join(n_line))
+
+    to_append = '\n' + '\n'.join(out)
+
+    with open(filepath.replace('task2', 'task3p'), 'a') as f:
+        f.write(to_append)
+
+
+def modify_task2_files_more_data():
+    common_path = '../data/files/'
+
+    for lang in ['LANG', 'arabic', 'finnish', 'georgian', 'german', 'hungarian', 'maltese', 'navajo', 'russian', 'spanish', 'turkish']:
+
+        n_p = common_path + '{}-task2-'.format(lang)
+        for t in ['train', 'dev', 'test']:
+            filepath = n_p + t
+
+            if os.path.isfile(filepath):
+                task_2_more_data(filepath)
+
 if __name__ == '__main__':
 
     parser   = argparse.ArgumentParser()
@@ -237,3 +269,4 @@ if __name__ == '__main__':
     modify_task2_files()
     modify_task1_files()
     modify_task3_files()
+    modify_task2_files_more_data()
