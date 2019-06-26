@@ -54,41 +54,21 @@ class StretchedAndRectifiedDistribution(torch.distributions.Distribution):
         self.loc = lower
         self.scale = upper - lower
 
-    def log_prob(self, value, pp=False):
+    def log_prob(self, value):
         # x ~ p(x), and y = hardtanh(x) -> y ~ q(y)
 
         # log_q(x==0) = cdf_p(0) and log_q(x) = log_q(x)
         zeros = torch.zeros_like(value)
         log_p = torch.where(value == zeros,
+                            #torch.log(self.base.cdf((value - self.loc) / self.scale)),
                             torch.log(torch.clamp(self.stretched.cdf(zeros), min=EPS)),
                             self.stretched.log_prob(value))
 
         # log_q(x==1) = 1 - cdf_p(1)
         ones = torch.ones_like(value)
-        # print(self.stretched.cdf(ones))
-        # print(torch.log(1. - self.stretched.cdf(ones)))
-        # print(torch.log(1. - self.stretched.cdf(ones) + torch.tensor([EPS])))
-
-
-        # print("&&&&&&&&&&&&&")
-        # print(self.stretched.cdf(ones))
-        # print(torch.clamp(1 - self.stretched.cdf(ones), min=EPS))
-
         log_p = torch.where(value == ones,
                             torch.log(torch.clamp(1 - self.stretched.cdf(ones), min=EPS)),
                             log_p)
-
-        if pp:
-
-            print("----")
-            #
-            # print(torch.log(1. - self.stretched.cdf(ones) + EPS))
-            # print("----")
-            # device = torch.device('cuda')
-            # print("log_prob")
-            # print(value)
-            # print(ones)
-            # print(torch.where(value == ones, torch.tensor([1.]).to(device), torch.tensor([0.]).to(device)))
 
         return log_p
 
@@ -101,8 +81,9 @@ class StretchedAndRectifiedDistribution(torch.distributions.Distribution):
         """
         cdf = torch.where(
             value < torch.ones_like(value),
-            self.stretched.cdf(value),
-            torch.ones_like(value)  # all of the mass
+            #self.base.cdf((value - self.loc) / self.scale),
+            self.stretched.cdf(value),       # self.base.cdf((value - self.loc) / self.scale),
+            torch.ones_like(value)           # all of the mass
         )
         return cdf
 
@@ -111,8 +92,6 @@ class StretchedAndRectifiedDistribution(torch.distributions.Distribution):
             return self.rsample(sample_shape)
 
     def rsample(self, sample_shape=torch.Size()):
-        #x = self.stretched.rsample(sample_shape)
-        #return (torch.nn.functional.hardtanh(x, 0., 1.) - x).detach() + x
         return torch.nn.functional.hardtanh(self.stretched.rsample(sample_shape), 0., 1.)
 
 
@@ -160,7 +139,6 @@ def kl_truncated_sampling(p, q, n_samples=1):
     # x ~ Base(a,b) where x \in (k0, k1)
     x = p.base.rsample_truncated(k0, k1, sample_shape=torch.Size([n_samples]))
     # x ~ Stretched(loc, scale) though constrained to (0, 1)
-
     x = p.loc + x * p.scale
     # wrt (lower, upper)
     log_ratio_cont = (p.stretched.log_prob(x) - q.stretched.log_prob(x)).mean(0)
@@ -173,10 +151,14 @@ def kl_truncated_sampling(p, q, n_samples=1):
     log_p1 = p.log_prob(ones)
     p1 = ones - p.stretched.cdf(ones)  # torch.exp(log_p1)
     #p_cont = ones - p0 - p1
+
     p_cont = p.stretched.cdf(ones) - p.stretched.cdf(zeros)
+    print("XXXXXXXXXXXXXXXXXXXXXXXXXX")
+
 
     log_q0 = q.log_prob(zeros)
     log_q1 = q.log_prob(ones)
+    # return
 
     # wrt lower
     log_ratio_0 = log_p0 - log_q0
@@ -184,19 +166,11 @@ def kl_truncated_sampling(p, q, n_samples=1):
     # wrt upper
     log_ratio_1 = log_p1 - log_q1
 
-    print("*******")
-    # print(p.loc)
-    # print(p.scale)
-    print(torch.isnan(p.stretched.log_prob(x).sum()))
-    print(torch.isnan(q.stretched.log_prob(x).sum()))
-    print(torch.isnan(log_ratio_cont.sum()))
+    # print(log_ratio_cont)
 
     kl_0 = torch.where(p0 > 0., p0 * log_ratio_0, p0)
     kl_1 = torch.where(p1 > 0., p1 * log_ratio_1, p1)
     kl_c = torch.where(p_cont > 0., p_cont * log_ratio_cont, p_cont)
-
-    # print(p0 * log_ratio_0 + p1 * log_ratio_1 + p_cont * log_ratio_cont)
-    # print("**")
 
     return kl_0 + kl_1 + kl_c
 

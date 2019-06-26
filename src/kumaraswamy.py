@@ -8,7 +8,7 @@ from torch.distributions.gumbel import euler_constant
 from torch.distributions.kl import register_kl
 
 
-EPS = 1e-5
+EPS = 1e-4
 
 def _lbeta(a, b):
     return torch.lgamma(a) + torch.lgamma(b) - torch.lgamma(a + b)
@@ -22,13 +22,10 @@ class Kumaraswamy(TransformedDistribution):
     Samples from a two-parameter Kumaraswamy distribution with a, b parameters. Or equivalently,
         U ~ U(0,1)
         X = (1 - (1 - U)^(1 / b))^(1 / a)
-
     Example:
-
         >>> m = Kumaraswamy(torch.tensor([1.0]), torch.tensor([1.0]))
         >>> m.sample()  # sample from a Kuma distribution with a=1, n=1
         tensor([ 0.4784])
-
     Args:
         a (float or Tensor): TODO.
         b (float or Tensor): TODO.
@@ -69,56 +66,14 @@ class Kumaraswamy(TransformedDistribution):
 
     def log_prob(self, value):
 
-        term_1 = torch.log(self.a + EPS)
-        term_2 = torch.log(self.b + EPS)
-
-        term_31 = torch.log(value + EPS)
-        term_3 = (self.a - 1) * term_31
-        # term_411 = value ** self.a
-        term_411 = value.pow(self.a)
-
-        print("ADSFASDFASDFASFDASDFSADF")
         print(value)
-        print(self.a)
-        print(value.size())
-        print(self.a.size())
-        print("XXXX")
+        print(torch.log(torch.clamp(1 - value ** self.a, min=EPS)))
 
-        term_41 = torch.log(1. - term_411 + EPS)
-        # term_41 = torch.log(torch.clamp(1. - value ** self.a, min=EPS))
-
-
-        term_4 = (self.b - 1) * term_41
-
-        print("TERM 41")
-        print(term_41)
-
-
-        val = term_1 + term_2 + term_3 + term_4
-
-        if torch.isnan(val.sum()):
-
-            print("&&&&&&&&&&&&&& log_prob &&&&&&&&&&&&&&")
-            # print(torch.log(1 - value ** self.a + EPS))
-            print(torch.log(self.a + EPS))
-            print(torch.log(self.b + EPS))
-            print((self.a - 1) * torch.log(value + EPS))
-            print((self.b - 1) * torch.log(1 - value ** self.a + EPS))
-            print("&&&&")
-
-        return val
+        return torch.log(torch.clamp(self.a, min=EPS)) + torch.log(torch.clamp(self.b, min=EPS)) \
+            + (self.a - 1) * torch.log(torch.clamp(value, min=EPS)) + (self.b - 1) * torch.log(torch.clamp(1 - value ** self.a, min=EPS))
 
     def log_cdf(self, value):
-
-        val = torch.log(1. - (1. - value ** self.a) ** self.b + EPS)
-
-        # if torch.isnan(val.sum()):
-        #     print("log cdf")
-        #     print(1. - (1. - value ** self.a) ** self.b + EPS)
-
-        return val
-
-        # return torch.log(1. - (1. - value ** self.a) ** self.b + EPS)
+        return torch.log(torch.clamp(1. - (1. - value ** self.a + EPS) ** self.b, min=EPS))
 
     def cdf(self, value):
         return torch.exp(self.log_cdf(value))
@@ -145,35 +100,25 @@ class Kumaraswamy(TransformedDistribution):
         # U ~ Uniform(cdf(k0), cdf(k1))
         # K = F^-1(U)
         #  simulates K over the truncated support (k0,k1)
-        dist = Uniform(self.cdf(torch.full_like(self.a, k0)),
-                    torch.clamp(self.cdf(torch.full_like(self.b, k1)), max=(1.-EPS)))
 
+        l = torch.clamp(self.cdf(torch.full_like(self.a, k0)), min=EPS)
+        h = torch.clamp(self.cdf(torch.full_like(self.b, k1)), max=1-EPS)
 
-        print(self.a)
-        print(self.b)
+        dist = Uniform(l, h)
 
-
-        print("Uniform")
-        print(dist.low)
-        print(dist.high)
+        # print("----")
+        # print(l)
+        # print(h)
 
         x = dist.rsample(sample_shape)
 
-        # x = torch.clamp(x, max=1.)
+        # print("***")
+        # print(self.a)
+        # print(self.b)
 
-
-        # print(k0)
-        # print(k1)
-
-        print("++++++")
-        print(x)
 
         for transform in self.transforms:
             x = transform(x)
-            # print("===")
-
-        print(x)
-        print("+++")
         return x
 
 def kl_kumaraswamy_kumaraswamy(p, q, n_samples=1, exact_entropy=True):
@@ -182,7 +127,7 @@ def kl_kumaraswamy_kumaraswamy(p, q, n_samples=1, exact_entropy=True):
      where the entropy can be computed in closed form or estimated
      the cross entropy is always estimated
     """
-    x = p.sample(sample_shape=torch.Size([n_samples]))
+    x = p.rsample(sample_shape=torch.Size([n_samples]))
     if exact_entropy:
         p_entropy = p.entropy()
     else:
