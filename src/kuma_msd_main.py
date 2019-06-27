@@ -48,7 +48,10 @@ def initialize_model(config):
         kumaMSD       = KumaMSD(input_dim       =config['enc_h_dim'] * 2,
                                 h_dim           =config['msd_h_dim'],
                                 num_tags        =config['label_len'],
-                                encoder         =encoder_x_t).to(device)
+                                encoder         =encoder_x_t,
+                                device          =device,
+                                unconstrained   =config['unconstrained'],
+                                use_made        =config['use_made']).to(device)
 
         return kumaMSD
 
@@ -191,6 +194,9 @@ if __name__ == "__main__":
     parser.add_argument('--train',       action="store_true")
     parser.add_argument('--test',        action="store_true")
     parser.add_argument('--dont_save',   action="store_true",        default=False)
+    parser.add_argument('--unconstrained', action="store_true",      default=False)
+    parser.add_argument('--use_made',      action="store_true",      default=False)
+
     parser.add_argument('-model',        action="store", type=str,   default='kumamsd')
     parser.add_argument('-model_id',     action="store", type=int)
     parser.add_argument('-language',     action="store", type=str)
@@ -232,6 +238,8 @@ if __name__ == "__main__":
     config['num_workers']   = args.num_workers
     config['model']         = args.model
     config['msd_h_dim']     = args.msd_h_dim
+    config['unconstrained'] = args.unconstrained
+    config['use_made']      = args.use_made
 
     # TRAIN
     if run_train:
