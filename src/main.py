@@ -209,6 +209,54 @@ def process_unsup_msd(batch_y_t, device):
     return torch.tensor(output).to(device)
 
 
+def compute_supervised_loss(ce_loss_func, x_t_p_sup, x_t_a_sup, mu_sup, logvar_sup, h_kuma_prior,
+                            h_kuma_post_sup, y_t_sup, kl_weight, lag_weight, config):
+    '''Compute supervised loss'''
+
+    ce_loss_sup      = ce_loss_func(x_t_p_sup, x_t_a_sup)
+    kl_sup           = kl_div_sup(mu_sup, logvar_sup)
+    kuma_loss_sup    = -1. * torch.mean(h_kuma_prior.log_prob(torch.sum(y_t_sup, dim=0)))
+    yt_loss_sup      = -1. * torch.mean(h_kuma_post_sup.log_prob(torch.sum(y_t_sup, dim=0)))
+
+    if   config['elbo_fix'] == 'kl_anneal':
+        clamp_kl_sup         = kl_weight * kl_sup
+    elif config['elbo_fix'] == 'habits':
+        # ha bits, like free bits but over whole layer
+        # REFERENCE: https://github.com/kastnerkyle/pytorch-text-vae
+        habits_lambda        = config['lambda_m']
+        clamp_kl_sup         = torch.clamp(kl_sup.mean(), min=habits_lambda).squeeze()
+    elif config['elbo_fix'] == 'mdr':
+        rate                 = config['lambda_m']
+        clamp_kl_sup         = kl_sup.mean() + lag_weight.abs() * (rate - kl_sup.mean())
+
+    loss_sup = ce_loss_sup + clamp_kl_sup + yt_loss_sup
+
+    return ce_loss_sup, kl_sup, kuma_loss_sup, yt_loss_sup, clamp_kl_sup, loss_sup
+
+
+def compute_unsupervised_loss(ce_loss_func, x_t_p_unsup, x_t_a_unsup, mu_unsup, logvar_unsup,
+                              h_kuma_post_unsup, h_kuma_prior, kl_weight, lag_weight, config):
+    '''Compute unsupervised loss'''
+
+    ce_loss_unsup  = ce_loss_func(x_t_p_unsup, x_t_a_unsup)
+    kl_unsup       = kl_div_sup(mu_unsup, logvar_unsup)
+    kl_kuma_unsup  = torch.distributions.kl.kl_divergence(h_kuma_post_unsup, h_kuma_prior)
+
+    if   config['elbo_fix'] == 'kl_anneal':
+        clamp_kl_unsup       = kl_weight * kl_unsup
+    elif config['elbo_fix'] == 'habits':
+        habits_lambda_kuma   = config['lambda_kuma']
+        clamp_kl_unsup       = torch.clamp(kl_unsup.mean(),      min=habits_lambda).squeeze()
+    elif config['elbo_fix'] == 'mdr':
+        rate                 = config['lambda_m']
+        clamp_kl_unsup       = kl_unsup.mean() + lag_weight.abs() * (rate - kl_unsup.mean())
+
+    clamp_kl_kuma_unsup      = torch.clamp(kl_kuma_unsup.mean(), min=habits_lambda_kuma).squeeze()
+    loss_unsup               = ce_loss_unsup + clamp_kl_unsup + clamp_kl_kuma_unsup
+
+    return ce_loss_unsup, kl_unsup, kl_kuma_unsup, clamp_kl_unsup, clamp_kl_kuma_unsup, loss_unsup
+
+
 def train(config, vocab, dont_save):
     '''
     Train function
@@ -242,6 +290,8 @@ def train(config, vocab, dont_save):
     else:
         params      = list(model.parameters()) + list(kumaMSD.parameters())
     optimizer       = optim.Adadelta(params,   lr=config['lr'], rho=config['rho'])
+    lag_weight      = torch.rand(1, requires_grad=True, device=device)
+    optimizer_mdr   = optim.RMSprop([lag_weight])
     ce_loss_func    = nn.CrossEntropyLoss(ignore_index=config['padding_idx'])
 
     kl_weight       = config['kl_start']
@@ -348,6 +398,9 @@ def train(config, vocab, dont_save):
 
                 optimizer.zero_grad()
 
+                if config['elbo_fix'] == 'mdr':
+                    optimizer_mdr.zero_grad()
+
                 ############ SUPERVISED PIPIELINE ############
                 y_t_p_sup, h_kuma_post_sup    = kumaMSD(x_t_sup)
                 x_t_p_sup, mu_sup, logvar_sup = model(x_s_sup, x_t_sup, y_t_sup)
@@ -355,17 +408,8 @@ def train(config, vocab, dont_save):
                 x_t_p_sup = x_t_p_sup[1:].view(-1, x_t_p_sup.shape[-1])
                 x_t_a_sup = x_t_sup[1:].contiguous().view(-1)
 
-                # Compute supervised loss
-                ce_loss_sup   = ce_loss_func(x_t_p_sup, x_t_a_sup)
-                kl_sup        = kl_div_sup(mu_sup, logvar_sup)
-                kuma_loss_sup = -1. * torch.mean(h_kuma_prior.log_prob(torch.sum(y_t_sup, dim=0)))
-                yt_loss_sup   = -1. * torch.mean(h_kuma_post_sup.log_prob(torch.sum(y_t_sup, dim=0)))
-
-                # ha bits, like free bits but over whole layer
-                # REFERENCE: https://github.com/kastnerkyle/pytorch-text-vae
-                habits_lambda = config['lambda_m']
-                clamp_kl_sup  = torch.clamp(kl_sup.mean(), min=habits_lambda).squeeze()
-                loss_sup      = ce_loss_sup + clamp_kl_sup + yt_loss_sup
+                ce_loss_sup, kl_sup, kuma_loss_sup, yt_loss_sup, clamp_kl_sup, loss_sup = compute_supervised_loss(ce_loss_func, x_t_p_sup, x_t_a_sup, mu_sup, logvar_sup, h_kuma_prior,
+                                                                                                                  h_kuma_post_sup, y_t_sup, kl_weight, lag_weight, config)
 
                 ############ UNSUPERVISED PIPIELINE ############
                 loss_unsup          = torch.zeros(1).to(device)
@@ -384,20 +428,20 @@ def train(config, vocab, dont_save):
                     x_t_p_unsup = x_t_p_unsup[1:].view(-1, x_t_p_unsup.shape[-1])
                     x_t_a_unsup = x_t_unsup[1:].contiguous().view(-1)
 
-                    # Compute unsupervised loss
-                    ce_loss_unsup  = ce_loss_func(x_t_p_unsup, x_t_a_unsup)
-                    kl_unsup       = kl_div_sup(mu_unsup, logvar_unsup)
-                    kl_kuma_unsup  = torch.distributions.kl.kl_divergence(h_kuma_post_unsup, h_kuma_prior)
-
-                    habits_lambda_kuma  = config['lambda_kuma']
-                    clamp_kl_unsup      = torch.clamp(kl_unsup.mean(),      min=habits_lambda).squeeze()
-                    clamp_kl_kuma_unsup = torch.clamp(kl_kuma_unsup.mean(), min=habits_lambda_kuma).squeeze()
-                    loss_unsup     = ce_loss_unsup + clamp_kl_unsup + clamp_kl_kuma_unsup
+                    ce_loss_unsup, kl_unsup, kl_kuma_unsup, clamp_kl_unsup, clamp_kl_kuma_unsup, loss_unsup = compute_unsupervised_loss(ce_loss_func, x_t_p_unsup, x_t_a_unsup, mu_unsup, logvar_unsup,
+                                                                                                                                        h_kuma_post_unsup, h_kuma_prior, kl_weight, lag_weight, config)
 
                 total_loss = loss_sup + config['dt_unsup'] * loss_unsup
                 total_loss.backward()
 
             torch.nn.utils.clip_grad_norm_(list(model.parameters()) + list(kumaMSD.parameters()), 10)
+
+            if config['elbo_fix'] == 'mdr':
+                for group in optimizer_mdr.param_groups:
+                    for p in group['params']:
+                        p.grad = -1 * p.grad
+                optimizer_mdr.step()
+
             optimizer.step()
 
             num_batches   += 1
@@ -485,6 +529,7 @@ if __name__ == "__main__":
     parser.add_argument('-max_unsup',    action="store", type=int,   default=10000)
     parser.add_argument('-dt_unsup',     action="store", type=float, default=0.7)
     parser.add_argument('-num_workers',  action="store", type=int,   default=2)
+    parser.add_argument('-elbo_fix',     action="store", type=str,   default='habits')
 
     args                    = parser.parse_args()
     run_train               = args.train
@@ -520,6 +565,7 @@ if __name__ == "__main__":
     config['unconstrained'] = args.unconstrained
     config['use_made']      = args.use_made
     config['dropout_type']  = args.drop_type
+    config['elbo_fix']      = args.elbo_fix
 
     # TRAIN
     if run_train:
