@@ -68,12 +68,11 @@ class Kumaraswamy(TransformedDistribution):
         return new
 
     def log_prob(self, value):
-
         return torch.log(self.a + EPS) + torch.log(self.b + EPS) + (self.a - 1) * torch.log(value + EPS) \
             + (self.b - 1) * torch.log(1 - value ** self.a + EPS)
 
     def log_cdf(self, value):
-        return torch.log(1. - (1. - value ** self.a) ** self.b + EPS)
+        return torch.log(1. - (1. - value ** self.a + EPS) ** self.b + EPS)
 
     def cdf(self, value):
         return torch.exp(self.log_cdf(value))
@@ -100,8 +99,11 @@ class Kumaraswamy(TransformedDistribution):
         # U ~ Uniform(cdf(k0), cdf(k1))
         # K = F^-1(U)
         #  simulates K over the truncated support (k0,k1)
-        x = Uniform(self.cdf(torch.full_like(self.a, k0)),
-                    self.cdf(torch.full_like(self.b, k1))).rsample(sample_shape)
+
+        l_b = torch.clamp(self.cdf(torch.full_like(self.a, k0)), min=EPS)
+        h_b = torch.clamp(self.cdf(torch.full_like(self.b, k1)), max=(1 - EPS*10))
+
+        x = Uniform(l_b, h_b).rsample(sample_shape)
         for transform in self.transforms:
             x = transform(x)
         return x
@@ -112,7 +114,7 @@ def kl_kumaraswamy_kumaraswamy(p, q, n_samples=1, exact_entropy=True):
      where the entropy can be computed in closed form or estimated
      the cross entropy is always estimated
     """
-    x = p.sample(sample_shape=torch.Size([n_samples]))
+    x = p.rsample(sample_shape=torch.Size([n_samples]))
     if exact_entropy:
         p_entropy = p.entropy()
     else:

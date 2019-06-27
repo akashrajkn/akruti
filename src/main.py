@@ -291,26 +291,30 @@ def train(config, vocab, dont_save):
         start        = timer()
         epoch_loss   = 0
         num_batches  = 0
-        count        = 1 if config['only_sup'] else 0
+
         done_sup     = False
         done_unsup   = False
+        count_sup    = 0
+        count_unsup  = 1 if config['only_sup'] else 0
 
         it_sup       = iter(train_loader_sup)
         if not config['only_sup']:
             it_unsup = iter(train_loader_unsup)
 
         while True:
-            if count == 2:
+            if count_sup > 0 and count_unsup > 0:
                 break
 
             if done_sup:
-                count += 1
-                it_sup = iter(train_loader_sup)
+                it_sup     = iter(train_loader_sup)
+                count_sup += 1
+                done_sup   = False
 
             if not config['only_sup']:
                 if done_unsup:
-                    count += 1
-                    it_unsup = iter(train_loader_unsup)
+                    it_unsup     = iter(train_loader_unsup)
+                    count_unsup += 1
+                    done_unsup   = False
 
             # Sample data points
             try:
@@ -354,7 +358,6 @@ def train(config, vocab, dont_save):
                 # Compute supervised loss
                 ce_loss_sup   = ce_loss_func(x_t_p_sup, x_t_a_sup)
                 kl_sup        = kl_div_sup(mu_sup, logvar_sup)
-                # kuma_loss_sup = torch.sum(torch.distributions.kl.kl_divergence(h_kuma_post_sup, h_kuma_prior))
                 kuma_loss_sup = -1. * torch.mean(h_kuma_prior.log_prob(torch.sum(y_t_sup, dim=0)))
                 yt_loss_sup   = -1. * torch.mean(h_kuma_post_sup.log_prob(torch.sum(y_t_sup, dim=0)))
 

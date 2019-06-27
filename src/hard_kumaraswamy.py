@@ -60,13 +60,14 @@ class StretchedAndRectifiedDistribution(torch.distributions.Distribution):
         # log_q(x==0) = cdf_p(0) and log_q(x) = log_q(x)
         zeros = torch.zeros_like(value)
         log_p = torch.where(value == zeros,
-                            torch.log(self.stretched.cdf(zeros)),
+                            #torch.log(self.base.cdf((value - self.loc) / self.scale)),
+                            torch.log(torch.clamp(self.stretched.cdf(zeros), min=EPS)),
                             self.stretched.log_prob(value))
 
         # log_q(x==1) = 1 - cdf_p(1)
         ones = torch.ones_like(value)
         log_p = torch.where(value == ones,
-                            torch.log(1 - self.stretched.cdf(ones)),
+                            torch.log(torch.clamp(1 - self.stretched.cdf(ones), min=EPS)),
                             log_p)
 
         return log_p
@@ -80,8 +81,9 @@ class StretchedAndRectifiedDistribution(torch.distributions.Distribution):
         """
         cdf = torch.where(
             value < torch.ones_like(value),
-            self.stretched.cdf(value),
-            torch.ones_like(value)  # all of the mass
+            #self.base.cdf((value - self.loc) / self.scale),
+            self.stretched.cdf(value),       # self.base.cdf((value - self.loc) / self.scale),
+            torch.ones_like(value)           # all of the mass
         )
         return cdf
 
@@ -90,13 +92,11 @@ class StretchedAndRectifiedDistribution(torch.distributions.Distribution):
             return self.rsample(sample_shape)
 
     def rsample(self, sample_shape=torch.Size()):
-        #x = self.stretched.rsample(sample_shape)
-        #return (torch.nn.functional.hardtanh(x, 0., 1.) - x).detach() + x
         return torch.nn.functional.hardtanh(self.stretched.rsample(sample_shape), 0., 1.)
 
 
 def kl_base_sampling(p, q, n_samples=1):
-    x = p.sample(sample_shape=torch.Size([n_samples]))
+    x = p.rsample(sample_shape=torch.Size([n_samples]))
     return (p.log_prob(x) - q.log_prob(x)).mean(0)
 
 
@@ -162,7 +162,11 @@ def kl_truncated_sampling(p, q, n_samples=1):
     # wrt upper
     log_ratio_1 = log_p1 - log_q1
 
-    return p0 * log_ratio_0 + p1 * log_ratio_1 + p_cont * log_ratio_cont
+    kl_0 = torch.where(p0 > 0., p0 * log_ratio_0, p0)
+    kl_1 = torch.where(p1 > 0., p1 * log_ratio_1, p1)
+    kl_c = torch.where(p_cont > 0., p_cont * log_ratio_cont, p_cont)
+
+    return kl_0 + kl_1 + kl_c
 
 
 @register_kl(StretchedAndRectifiedDistribution, StretchedAndRectifiedDistribution)
