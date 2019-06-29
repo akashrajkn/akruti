@@ -132,10 +132,16 @@ if __name__ == "__main__":
     parser  = argparse.ArgumentParser(description='SIGMORPHON 2016 Shared Task Evaluation')
     parser.add_argument('-language', action="store", type=str)
     parser.add_argument('-model_id', action="store", type=int)
+    parser.add_argument('-model',    action="store", type=str, default='default')
+
     args    = parser.parse_args()
 
     golden  = read_file('../data/files/{}-task3-test'.format(args.language))
-    guesses = read_file('../results/{}-{}-guesses'.format(args.language, args.model_id))
+
+    if args.model == 'default':
+        guesses = read_file('../results/{}-{}-guesses'.format(args.language, args.model_id))
+    else:
+        guesses = read_file('../results/{}_{}-{}-guesses'.format(args.model, args.language, args.model_id))
 
     A, L, NL, R, breakdown, breakdown_N = aggregate(golden, guesses)
 
