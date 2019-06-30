@@ -251,6 +251,7 @@ def compute_unsupervised_loss(ce_loss_func, x_t_p_unsup, x_t_a_unsup, mu_unsup, 
         rate                 = config['lambda_m']
         clamp_kl_unsup       = kl_unsup.mean() + lag_weight.abs() * (rate - kl_unsup.mean())
 
+    habits_lambda_kuma       = config['lambda_m']
     clamp_kl_kuma_unsup      = torch.clamp(kl_kuma_unsup.mean(), min=habits_lambda_kuma).squeeze()
     loss_unsup               = ce_loss_unsup + clamp_kl_unsup + clamp_kl_kuma_unsup
 
