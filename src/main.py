@@ -219,7 +219,7 @@ def compute_supervised_loss(ce_loss_func, x_t_p_sup, x_t_a_sup, mu_sup, logvar_s
     yt_loss_sup      = -1. * torch.mean(h_kuma_post_sup.log_prob(torch.sum(y_t_sup, dim=0)))
 
     if   config['elbo_fix'] == 'kl_anneal':
-        clamp_kl_sup         = kl_weight * kl_sup
+        clamp_kl_sup         = kl_weight * kl_sup.mean()
     elif config['elbo_fix'] == 'habits':
         # ha bits, like free bits but over whole layer
         # REFERENCE: https://github.com/kastnerkyle/pytorch-text-vae
@@ -243,7 +243,7 @@ def compute_unsupervised_loss(ce_loss_func, x_t_p_unsup, x_t_a_unsup, mu_unsup, 
     kl_kuma_unsup  = torch.distributions.kl.kl_divergence(h_kuma_post_unsup, h_kuma_prior)
 
     if   config['elbo_fix'] == 'kl_anneal':
-        clamp_kl_unsup       = kl_weight * kl_unsup
+        clamp_kl_unsup       = kl_weight * kl_unsup.mean()
     elif config['elbo_fix'] == 'habits':
         habits_lambda_kuma   = config['lambda_kuma']
         clamp_kl_unsup       = torch.clamp(kl_unsup.mean(),      min=habits_lambda).squeeze()
