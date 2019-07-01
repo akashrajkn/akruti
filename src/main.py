@@ -245,7 +245,7 @@ def compute_unsupervised_loss(ce_loss_func, x_t_p_unsup, x_t_a_unsup, mu_unsup, 
     if   config['elbo_fix'] == 'kl_anneal':
         clamp_kl_unsup       = kl_weight * kl_unsup.mean()
     elif config['elbo_fix'] == 'habits':
-        habits_lambda_kuma   = config['lambda_kuma']
+        habits_lambda        = config['lambda_kuma']
         clamp_kl_unsup       = torch.clamp(kl_unsup.mean(),      min=habits_lambda).squeeze()
     elif config['elbo_fix'] == 'mdr':
         rate                 = config['lambda_m']
