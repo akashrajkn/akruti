@@ -157,6 +157,11 @@ class MorphologyDatasetTask3(Dataset):
             self.pd_data  = pd.read_csv(common_path + '-task3p-test', delimiter=self.delimiter, header=None)
             return
 
+        if self.tasks[0] == 'task1_vae':
+            filepath = '../data/{}_stem_greater_12'.format(self.language)
+            self.pd_data  = pd.read_csv(filepath, delimiter=self.delimiter, header=None)
+            return
+
         if self.tasks[0] == 'task3p':
             f_types = ['train', 'dev']
         else:

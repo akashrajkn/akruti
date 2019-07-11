@@ -75,7 +75,7 @@ def initialize_dataloader(run_type, language, task, vocab, batch_size, shuffle, 
     if task == 'sup':
         tasks = ['task3p']
     elif task == 'msvae' or task == 'vae':
-        tasks = ['task1']
+        tasks = ['task1_vae']
 
     morph_data = MorphologyDatasetTask3(test=is_test, language=language, vocab=vocab, tasks=tasks, get_unprocessed=is_test,
                                         max_unsup=max_unsup, max_seq_len=max_seq_len)
@@ -119,7 +119,7 @@ def train(config, vocab, dont_save):
     # Model declaration
     model           = initialize_model(config)
     optimizer       = optim.Adadelta(model.parameters(), lr=config['lr'], rho=config['rho'])
-    ce_loss_func    = nn.CrossEntropyLoss()  #ignore_index=config['padding_idx'])
+    ce_loss_func    = nn.CrossEntropyLoss(ignore_index=config['padding_idx'])
 
     kl_weight       = config['kl_start']
     len_data        = len(train_loader_sup)
@@ -164,11 +164,9 @@ def train(config, vocab, dont_save):
                 break
 
             with autograd.detect_anomaly():
-                x_s_sup   = sample_batched_sup['source_form'].to(device)
                 x_t_sup   = sample_batched_sup['target_form'].to(device)
                 y_t_sup   = sample_batched_sup['msd'].to(device)
 
-                x_s_sup   = torch.transpose(x_s_sup, 0, 1)
                 x_t_sup   = torch.transpose(x_t_sup, 0, 1)
                 y_t_sup   = torch.transpose(y_t_sup, 0, 1)
 
@@ -186,8 +184,10 @@ def train(config, vocab, dont_save):
 
                 # ha bits, like free bits but over whole layer
                 # REFERENCE: https://github.com/kastnerkyle/pytorch-text-vae
-                habits_lambda = config['lambda_m']
-                clamp_kl_sup  = torch.clamp(kl_sup.mean(), min=habits_lambda).squeeze()
+
+                # habits_lambda = config['lambda_m']
+                # clamp_kl_sup  = torch.clamp(kl_sup.mean(), min=habits_lambda).squeeze()
+                clamp_kl_sup  = kl_weight * kl_sup.mean()
                 loss_sup      = ce_loss_sup + clamp_kl_sup
 
                 total_loss    = loss_sup
