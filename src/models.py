@@ -293,3 +293,89 @@ class KumaMSD(nn.Module):
         sample = h_kuma.rsample()
 
         return sample, h_kuma
+
+
+class BernMSD(nn.Module):
+    '''
+    Generates samples of y_t (MSD) vector.
+    '''
+    def __init__(self, input_dim, h_dim, num_tags, encoder, device, l=-1., r=2., unconstrained=False, use_made=False):
+        super(BernMSD, self).__init__()
+
+        self.input_dim     = input_dim
+        self.h_dim         = h_dim
+        self.num_tags      = num_tags
+        self.encoder       = encoder
+        self.device        = device
+        self.use_made      = use_made
+
+        # Learned bern params
+        self.probs  = 0.
+
+        # TODO: initialization
+        self.fc     = nn.Linear(input_dim, h_dim)
+        self.probsi = nn.Linear(h_dim, num_tags)
+
+    def forward(self, x_t):
+
+        h, _, _ = self.encoder(x_t)
+        logits  = F.relu(self.fc(h))
+
+        if self.use_made:
+            u_tril = torch.ones(self.h_dim, self.h_dim)
+            u_tril = torch.tensor(np.tril(u_tril), requires_grad=False).to(self.device)
+            logits = torch.mm(logits, u_tril)
+
+        probs = torch.sigmoid(self.probsi(logits))
+        bern  = torch.distributions.bernoulli.Bernoulli(probs=probs)
+
+        self.probs = probs
+        sample     = bern.sample()
+
+        return sample, bern
+
+
+class ConcMSD(nn.Module):
+    '''
+    Generates samples of y_t (MSD) vector.
+    '''
+    def __init__(self, input_dim, h_dim, num_tags, encoder, device, l=-1., r=2., unconstrained=False, use_made=False):
+        super(ConcMSD, self).__init__()
+
+        self.input_dim     = input_dim
+        self.h_dim         = h_dim
+        self.num_tags      = num_tags
+        self.encoder       = encoder
+        self.device        = device
+        self.use_made      = use_made
+
+        # Learned bern params
+        self.temp   = 1.
+        self.probs  = 0.
+
+        # TODO: initialization
+        self.fc     = nn.Linear(input_dim, h_dim)
+        self.probsi = nn.Linear(h_dim, num_tags)
+        self.tempi  = nn.Linear(h_dim, num_tags)
+
+    def forward(self, x_t):
+
+        h, _, _ = self.encoder(x_t)
+        logits  = F.relu(self.fc(h))
+
+        if self.use_made:
+            u_tril = torch.ones(self.h_dim, self.h_dim)
+            u_tril = torch.tensor(np.tril(u_tril), requires_grad=False).to(self.device)
+            logits = torch.mm(logits, u_tril)
+
+        probs = torch.sigmoid(self.probsi(logits))
+        temp  = 0.01 + F.softplus(self.tempi(logits))
+        bern  = torch.distributions.relaxed_bernoulli.LogitRelaxedBernoulli(temperature=temp, probs=probs)
+
+        self.probs  = probs
+        self.temp   = temp
+        sample      = bern.rsample()
+
+        sample = torch.sigmoid(torch.exp(sample))
+
+        return sample, bern

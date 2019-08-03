@@ -15,7 +15,7 @@ from torch.utils.data import DataLoader
 from timeit import default_timer as timer
 from datetime import timedelta
 
-from models import KumaMSD, WordEncoder
+from models import KumaMSD, WordEncoder, BernMSD, ConcMSD
 from dataset import MorphologyDatasetTask3, Vocabulary
 
 
@@ -45,13 +45,30 @@ def initialize_model(config):
                                     padding_idx =config['padding_idx'],
                                     device      =device)
 
-        kumaMSD       = KumaMSD(input_dim       =config['enc_h_dim'] * 2,
-                                h_dim           =config['msd_h_dim'],
-                                num_tags        =config['label_len'],
-                                encoder         =encoder_x_t,
-                                device          =device,
-                                unconstrained   =config['unconstrained'],
-                                use_made        =config['use_made']).to(device)
+        if   config['distribution'] == 'hardkuma':
+            kumaMSD       = KumaMSD(input_dim       =config['enc_h_dim'] * 2,
+                                    h_dim           =config['msd_h_dim'],
+                                    num_tags        =config['label_len'],
+                                    encoder         =encoder_x_t,
+                                    device          =device,
+                                    unconstrained   =config['unconstrained'],
+                                    use_made        =config['use_made']).to(device)
+        elif config['distribution'] == 'bernoulli':
+            kumaMSD       = BernMSD(input_dim       =config['enc_h_dim'] * 2,
+                                    h_dim           =config['msd_h_dim'],
+                                    num_tags        =config['label_len'],
+                                    encoder         =encoder_x_t,
+                                    device          =device,
+                                    unconstrained   =config['unconstrained'],
+                                    use_made        =config['use_made']).to(device)
+        elif config['distribution'] == 'concrete':
+            kumaMSD       = ConcMSD(input_dim       =config['enc_h_dim'] * 2,
+                                    h_dim           =config['msd_h_dim'],
+                                    num_tags        =config['label_len'],
+                                    encoder         =encoder_x_t,
+                                    device          =device,
+                                    unconstrained   =config['unconstrained'],
+                                    use_made        =config['use_made']).to(device)
 
         return kumaMSD
 
@@ -214,6 +231,7 @@ if __name__ == "__main__":
     parser.add_argument('-lr',           action="store", type=float, default=0.1)
     parser.add_argument('-rho',          action="store", type=float, default=0.95)
     parser.add_argument('-num_workers',  action="store", type=int,   default=2)
+    parser.add_argument('-distribution', action="store", type=str,   default='hardkuma')
 
     args                    = parser.parse_args()
     run_train               = args.train
@@ -240,6 +258,7 @@ if __name__ == "__main__":
     config['msd_h_dim']     = args.msd_h_dim
     config['unconstrained'] = args.unconstrained
     config['use_made']      = args.use_made
+    config['distribution']  = args.distribution
 
     # TRAIN
     if run_train:
