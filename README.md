@@ -4,7 +4,7 @@
       <img align="left" src="logo.png" height=90/>
     </div>
     <div class="col">
-      <h1 align="justify">
+      <h1>
         Semi-supervised labeled sequence transduction with differentiable discrete variables
       </h1>
     </div>
